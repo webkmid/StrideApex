@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">StrideApex</string>
+    <string name="tagline">Athletic Telemetry, AI Strava OCR &amp; Biomechanics Lab</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="auth_subtitle">Sync workouts, race predictions, PRs, and cloud backups across all your devices.</string>
+    <string name="nav_dashboard">Telemetry</string>
+    <string name="nav_ocr_scan">Strava OCR</string>
+    <string name="nav_predict_prs">Predict &amp; PRs</string>
+    <string name="nav_biomechanics">Biomechanics</string>
+    <string name="scan_strava_screenshot">Scan Strava Screenshot</string>
+    <string name="generate_sample_strava">Load Sample Strava Screenshot</string>
+    <string name="analyze_with_gemini">Extract Metrics with Gemini AI</string>
+    <string name="save_workout_cloud">Save Workout to Cloud</string>
+    <string name="create_cloud_backup">Create Cloud Backup Checkpoint</string>
+    <string name="trigger_goal_reminder">Send Goal Push Reminder</string>
+</resources>

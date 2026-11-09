@@ -1,0 +1,6 @@
+{
+  "name": "StrideApex",
+  "description": "Athletic performance analyzer with Strava screenshot AI logging, race predictions, PR tracking, goal push reminders, biomechanical tutorials, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

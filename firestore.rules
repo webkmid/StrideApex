@@ -1,0 +1,245 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity 1: WorkoutLog Validation Helper
+    function isValidWorkoutLog(data, userId) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             (data.distanceKm is int || data.distanceKm is float) && data.distanceKm > 0 && data.distanceKm <= 500 &&
+             data.durationSeconds is int && data.durationSeconds > 0 && data.durationSeconds <= 864000 &&
+             data.avgPaceSecondsPerKm is int && data.avgPaceSecondsPerKm >= 60 && data.avgPaceSecondsPerKm <= 3600 &&
+             data.avgHeartRate is int && data.avgHeartRate >= 0 && data.avgHeartRate <= 260 &&
+             data.cadenceSpm is int && data.cadenceSpm >= 0 && data.cadenceSpm <= 300 &&
+             data.elevationGainM is int && data.elevationGainM >= 0 && data.elevationGainM <= 20000 &&
+             data.splitsSummary is string && data.splitsSummary.size() <= 1000 &&
+             data.aiCoachingInsight is string && data.aiCoachingInsight.size() <= 2000 &&
+             data.sourceType is string && data.sourceType in ['STRAVA_OCR', 'MANUAL'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Entity 2: PersonalRecord Validation Helper
+    function isValidPersonalRecord(data, userId) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.distanceCategory is string && data.distanceCategory in ['5K', '10K', 'HALF_MARATHON', 'MARATHON'] &&
+             data.distanceMeters is int && data.distanceMeters > 0 && data.distanceMeters <= 100000 &&
+             data.bestTimeSeconds is int && data.bestTimeSeconds > 0 && data.bestTimeSeconds <= 864000 &&
+             data.previousTimeSeconds is int && data.previousTimeSeconds >= 0 && data.previousTimeSeconds <= 864000 &&
+             data.paceSecondsPerKm is int && data.paceSecondsPerKm >= 60 && data.paceSecondsPerKm <= 3600 &&
+             data.workoutTitle is string && data.workoutTitle.size() >= 1 && data.workoutTitle.size() <= 120 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Entity 3: TrainingGoal Validation Helper
+    function isValidTrainingGoal(data, userId) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.targetDistanceCategory is string && data.targetDistanceCategory in ['5K', '10K', 'HALF_MARATHON', 'MARATHON'] &&
+             data.targetTimeSeconds is int && data.targetTimeSeconds > 0 && data.targetTimeSeconds <= 864000 &&
+             data.weeklyMileageTargetKm is int && data.weeklyMileageTargetKm >= 1 && data.weeklyMileageTargetKm <= 400 &&
+             data.reminderEnabled is bool &&
+             data.reminderHour is int && data.reminderHour >= 0 && data.reminderHour <= 23 &&
+             data.reminderMinute is int && data.reminderMinute >= 0 && data.reminderMinute <= 59 &&
+             data.completed is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Entity 4: CloudBackupSnapshot Validation Helper
+    function isValidCloudBackupSnapshot(data, userId) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.backupLabel is string && data.backupLabel.size() >= 1 && data.backupLabel.size() <= 120 &&
+             data.workoutCount is int && data.workoutCount >= 0 && data.workoutCount <= 10000 &&
+             data.prCount is int && data.prCount >= 0 && data.prCount <= 1000 &&
+             data.goalCount is int && data.goalCount >= 0 && data.goalCount <= 1000 &&
+             data.summaryNotes is string && data.summaryNotes.size() <= 4000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+
+      // 1. Workouts Subcollection
+      match /workouts/{workoutId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(workoutId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(workoutId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'distanceKm', 'durationSeconds',
+                           'avgPaceSecondsPerKm', 'avgHeartRate', 'cadenceSpm',
+                           'elevationGainM', 'splitsSummary', 'aiCoachingInsight',
+                           'sourceType', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'distanceKm', 'durationSeconds',
+                           'avgPaceSecondsPerKm', 'avgHeartRate', 'cadenceSpm',
+                           'elevationGainM', 'splitsSummary', 'aiCoachingInsight',
+                           'sourceType', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidWorkoutLog(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(workoutId) &&
+                         isValidWorkoutLog(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'distanceKm', 'durationSeconds',
+                           'avgPaceSecondsPerKm', 'avgHeartRate', 'cadenceSpm',
+                           'elevationGainM', 'splitsSummary', 'aiCoachingInsight',
+                           'sourceType', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(workoutId) && existing().userId == request.auth.uid;
+      }
+
+      // 2. Personal Records Subcollection
+      match /personalRecords/{prId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(prId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(prId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'distanceCategory', 'distanceMeters',
+                           'bestTimeSeconds', 'previousTimeSeconds',
+                           'paceSecondsPerKm', 'workoutTitle', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'distanceCategory', 'distanceMeters',
+                           'bestTimeSeconds', 'previousTimeSeconds',
+                           'paceSecondsPerKm', 'workoutTitle', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidPersonalRecord(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(prId) &&
+                         isValidPersonalRecord(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'distanceCategory', 'distanceMeters',
+                           'bestTimeSeconds', 'previousTimeSeconds',
+                           'paceSecondsPerKm', 'workoutTitle', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(prId) && existing().userId == request.auth.uid;
+      }
+
+      // 3. Training Goals Subcollection
+      match /goals/{goalId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(goalId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(goalId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'targetDistanceCategory',
+                           'targetTimeSeconds', 'weeklyMileageTargetKm',
+                           'reminderEnabled', 'reminderHour', 'reminderMinute',
+                           'completed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'targetDistanceCategory',
+                           'targetTimeSeconds', 'weeklyMileageTargetKm',
+                           'reminderEnabled', 'reminderHour', 'reminderMinute',
+                           'completed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidTrainingGoal(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(goalId) &&
+                         isValidTrainingGoal(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'targetDistanceCategory',
+                           'targetTimeSeconds', 'weeklyMileageTargetKm',
+                           'reminderEnabled', 'reminderHour', 'reminderMinute',
+                           'completed', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(goalId) && existing().userId == request.auth.uid;
+      }
+
+      // 4. Cloud Backup Snapshots Subcollection
+      match /backups/{backupId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(backupId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(backupId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'backupLabel', 'workoutCount',
+                           'prCount', 'goalCount', 'summaryNotes',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'backupLabel', 'workoutCount',
+                           'prCount', 'goalCount', 'summaryNotes',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidCloudBackupSnapshot(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(backupId) &&
+                         isValidCloudBackupSnapshot(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'backupLabel', 'workoutCount',
+                           'prCount', 'goalCount', 'summaryNotes', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(backupId) && existing().userId == request.auth.uid;
+      }
+    }
+  }
+}
