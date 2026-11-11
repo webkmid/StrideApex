@@ -50,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +96,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
@@ -105,8 +107,7 @@ enum class StrideApexTab(
 ) {
     DASHBOARD("dashboard", R.string.nav_dashboard, Icons.Default.Dashboard),
     STRAVA_OCR("strava_ocr", R.string.nav_ocr_scan, Icons.Default.AddAPhoto),
-    PREDICT_PRS("predict_prs", R.string.nav_predict_prs, Icons.Default.Speed),
-    BIOMECHANICS("biomechanics", R.string.nav_biomechanics, Icons.AutoMirrored.Filled.DirectionsRun)
+    PREDICT_PRS("predict_prs", R.string.nav_predict_prs, Icons.Default.Speed)
 }
 
 internal fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
@@ -211,6 +212,8 @@ fun MainFeatureScreen(
     val coachState by viewModel.coachState.collectAsStateWithLifecycle()
     val fatigueExponent by viewModel.fatigueExponent.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
+    val aiPlanLoading by viewModel.aiPlanLoading.collectAsStateWithLifecycle()
+    val aiPlanCoachingInsight by viewModel.aiPlanCoachingInsight.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf(StrideApexTab.DASHBOARD) }
 
@@ -376,6 +379,13 @@ fun MainFeatureScreen(
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
+                    LaunchedEffect(statusBanner) {
+                        if (!statusBanner.isNullOrBlank()) {
+                            delay(2500L)
+                            viewModel.clearStatusBanner()
+                        }
+                    }
+
                     AnimatedVisibility(visible = !statusBanner.isNullOrBlank()) {
                         Surface(
                             color = SlateSurface,
@@ -419,14 +429,28 @@ fun MainFeatureScreen(
                                     onNavigateToPredict = { currentTab = StrideApexTab.PREDICT_PRS },
                                     onCreateCloudBackup = { label -> viewModel.createCloudBackupCheckpoint(label) },
                                     onExportBackupJson = { viewModel.exportFullTrainingBackupJson() },
-                                    onDeleteWorkout = { id -> viewModel.deleteWorkout(id) }
+                                    onDeleteWorkout = { id -> viewModel.deleteWorkout(id) },
+                                    onUpdateWorkout = { id, title, dist, dur, hr, cad, elev, dateEpochMs ->
+                                        viewModel.updateWorkout(id, title, dist, dur, hr, cad, elev, dateEpochMs)
+                                    },
+                                    onAddGoal = { title, cat, sec, wkKm, enabled, hr, min ->
+                                        viewModel.addTrainingGoal(title, cat, sec, wkKm, enabled, hr, min)
+                                    },
+                                    onSaveGoalSchedule = { goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso ->
+                                        viewModel.saveOrUpdateGoalSchedule(goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso)
+                                    },
+                                    onToggleGoalCompleted = { goal -> viewModel.toggleGoalCompleted(goal) },
+                                    onDeleteGoal = { id -> viewModel.deleteGoal(id) },
+                                    onAskGeminiAdvice = { goal -> viewModel.askGeminiForTrainingPlanAdvice(goal) },
+                                    geminiAdviceText = aiPlanCoachingInsight,
+                                    isGeminiLoading = aiPlanLoading
                                 )
                             }
                             StrideApexTab.STRAVA_OCR -> {
                                 StravaOcrScreen(
                                     ocrState = ocrState,
                                     onAnalyzeBitmap = { bmp -> viewModel.analyzeStravaScreenshot(bmp) },
-                                    onSaveWorkout = { title, dist, dur, hr, cad, elev, splits, insight, src ->
+                                    onSaveWorkout = { title, dist, dur, hr, cad, elev, splits, insight, src, dateEpochMs ->
                                         viewModel.saveWorkoutAndCheckPr(
                                             title = title,
                                             distanceKm = dist,
@@ -437,6 +461,7 @@ fun MainFeatureScreen(
                                             splitsSummary = splits,
                                             aiCoachingInsight = insight,
                                             sourceType = src,
+                                            workoutDateEpochMs = dateEpochMs,
                                             onComplete = { currentTab = StrideApexTab.DASHBOARD }
                                         )
                                     }
@@ -446,23 +471,9 @@ fun MainFeatureScreen(
                                 RacePredictorAndPrScreen(
                                     workoutsState = workoutsState,
                                     prsState = prsState,
-                                    goalsState = goalsState,
                                     fatigueExponent = fatigueExponent,
                                     onFatigueExponentChange = { exp -> viewModel.updateFatigueExponent(exp) },
-                                    onUpsertPrManual = { cat, sec, title ->
-                                        viewModel.upsertPersonalRecordManual(cat, sec, title)
-                                    },
-                                    onAddGoal = { title, cat, sec, wkKm, enabled, hr, min ->
-                                        viewModel.addTrainingGoal(title, cat, sec, wkKm, enabled, hr, min)
-                                    },
-                                    onToggleGoalCompleted = { goal -> viewModel.toggleGoalCompleted(goal) },
-                                    onDeleteGoal = { id -> viewModel.deleteGoal(id) }
-                                )
-                            }
-                            StrideApexTab.BIOMECHANICS -> {
-                                BiomechanicsLabScreen(
-                                    coachState = coachState,
-                                    onAskCoach = { question, mod -> viewModel.askBiomechanicsCoach(question, mod) }
+                                    onDeletePr = { categoryKey -> viewModel.deletePersonalRecord(categoryKey) }
                                 )
                             }
                         }

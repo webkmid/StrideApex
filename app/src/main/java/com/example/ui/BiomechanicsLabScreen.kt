@@ -24,12 +24,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SlowMotionVideo
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,9 +103,7 @@ fun BiomechanicsLabScreen(
     var showPlumbLine by remember { mutableStateOf(true) }
 
     val completedDrills = remember { mutableStateListOf<String>() }
-    var coachQuestion by remember {
-        mutableStateOf("How do I fix overstriding when fatigued in the final 5K of a marathon?")
-    }
+    var coachQuestion by remember { mutableStateOf("") }
 
     // Continuous 60fps kinematic animation loop when playing
     LaunchedEffect(isPlaying, playbackSpeed) {
@@ -489,7 +487,7 @@ fun BiomechanicsLabScreen(
 
                     Button(
                         onClick = { onAskCoach(coachQuestion, activeModule) },
-                        enabled = coachState !is CoachUiState.Loading,
+                        enabled = coachQuestion.isNotBlank() && coachState !is CoachUiState.Loading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = VoltLime,
                             contentColor = Color.Black
@@ -499,7 +497,7 @@ fun BiomechanicsLabScreen(
                             .height(54.dp)
                             .testTag("ask_biomechanics_coach_button")
                     ) {
-                        Icon(imageVector = Icons.Default.Send, contentDescription = "Ask Coach")
+                        Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "Ask Coach")
                     }
                 }
 

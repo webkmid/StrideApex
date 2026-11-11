@@ -73,8 +73,8 @@ enum class DistanceCategory(
     val meters: Long,
     val kilometers: Double
 ) {
-    FIVE_K("5K", "5K Road Race", "5K", 5000L, 5.0),
-    TEN_K("10K", "10K Championship", "10K", 10000L, 10.0),
+    FIVE_K("5K", "5K Run", "5K", 5000L, 5.0),
+    TEN_K("10K", "10K Run", "10K", 10000L, 10.0),
     HALF_MARATHON("HALF_MARATHON", "Half Marathon", "21.1K", 21097L, 21.0975),
     MARATHON("MARATHON", "Full Marathon", "42.2K", 42195L, 42.195);
 
@@ -93,7 +93,9 @@ data class ExtractedStravaMetrics(
     val cadenceSpm: Long = 182L,
     val elevationGainM: Long = 85L,
     val splitsSummary: String = "KM 1-3: 4:08/km | KM 4-7: 4:05/km | KM 8-10: 4:03/km",
-    val aiCoachingInsight: String = "Strong negative split progression with controlled aerobic heart rate drift."
+    val aiCoachingInsight: String = "Strong negative split progression with controlled aerobic heart rate drift.",
+    val workoutDateEpochMs: Long? = null,
+    val detectedDateStr: String = ""
 )
 
 data class RacePredictionResult(

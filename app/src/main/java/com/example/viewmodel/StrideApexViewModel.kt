@@ -13,8 +13,12 @@ import com.example.data.model.PersonalRecord
 import com.example.data.model.TrainingGoal
 import com.example.data.model.WorkoutLog
 import com.example.data.repository.TrainingRepository
+import com.example.domain.GoalTrainingPlanEngine
+import com.example.domain.RacePredictionEngine
+import com.example.util.StravaLocalOcrParser
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.RequestOptions
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
@@ -27,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -81,16 +86,20 @@ class StrideApexViewModel(
 
     private val ocrGenerativeModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = "gemini-2.5-flash",
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = stravaOcrSchema
-            }
+            },
+            requestOptions = RequestOptions(timeoutInMillis = 30_000L)
         )
     }
 
     private val coachGenerativeModel by lazy {
-        Firebase.ai.generativeModel("gemini-3.8-flash")
+        Firebase.ai.generativeModel(
+            modelName = "gemini-2.5-flash",
+            requestOptions = RequestOptions(timeoutInMillis = 30_000L)
+        )
     }
 
     private val workoutsFlow: Flow<List<WorkoutLog>> =
@@ -138,7 +147,30 @@ class StrideApexViewModel(
             initialValue = UiState.Loading
         )
 
-    val prsState: StateFlow<UiState<List<PersonalRecord>>> = prsFlow
+    val prsState: StateFlow<UiState<List<PersonalRecord>>> = combine(
+        prsFlow,
+        workoutsFlow
+    ) { prsList, workoutsList ->
+        if (workoutsList.isEmpty()) {
+            emptyList()
+        } else {
+            // Group by category, deduplicate, and pick the best record per category
+            prsList
+                .groupBy { it.distanceCategory }
+                .mapNotNull { (_, records) ->
+                    records.minByOrNull { it.bestTimeSeconds }
+                }
+                .filter { pr ->
+                    val category = DistanceCategory.fromKey(pr.distanceCategory)
+                    // A PR category is validated if any workout has distance >= category.kilometers * 0.85
+                    // e.g. A 10K workout validates both 10K and 5K
+                    workoutsList.any { w ->
+                        w.distanceKm >= (category.kilometers * 0.85)
+                    }
+                }
+                .sortedBy { it.distanceMeters }
+        }
+    }
         .map<List<PersonalRecord>, UiState<List<PersonalRecord>>> { UiState.Success(it) }
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
@@ -154,6 +186,28 @@ class StrideApexViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = UiState.Loading
         )
+
+    init {
+        viewModelScope.launch {
+            try {
+                val remaining = localRepository.getAllWorkoutsList()
+                if (remaining.isEmpty()) {
+                    localRepository.deleteAllPersonalRecords()
+                    if (!isOfflineMode && cloudRepository != null) {
+                        try {
+                            cloudRepository.deleteAllPersonalRecords()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to clean orphan PRs from cloud", e)
+                        }
+                    }
+                } else {
+                    recalculatePrsFromRemainingWorkouts()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error synchronizing PRs on startup", e)
+            }
+        }
+    }
 
     val goalsState: StateFlow<UiState<List<TrainingGoal>>> = goalsFlow
         .map<List<TrainingGoal>, UiState<List<TrainingGoal>>> { UiState.Success(it) }
@@ -198,23 +252,14 @@ class StrideApexViewModel(
     private val _fatigueExponent = MutableStateFlow(1.06)
     val fatigueExponent: StateFlow<Double> = _fatigueExponent.asStateFlow()
 
+    private val _aiPlanLoading = MutableStateFlow(false)
+    val aiPlanLoading: StateFlow<Boolean> = _aiPlanLoading.asStateFlow()
+
+    private val _aiPlanCoachingInsight = MutableStateFlow<String?>(null)
+    val aiPlanCoachingInsight: StateFlow<String?> = _aiPlanCoachingInsight.asStateFlow()
+
     private val _statusBanner = MutableStateFlow<String?>(null)
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            try {
-                localRepository.seedInitialStarterDataIfEmpty()
-                if (!isOfflineMode && cloudRepository != null) {
-                    cloudRepository.seedInitialStarterData()
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Starter data seeding skipped or failed: ${e.message}")
-            }
-        }
-    }
 
     fun clearStatusBanner() {
         _statusBanner.value = null
@@ -227,55 +272,92 @@ class StrideApexViewModel(
     fun analyzeStravaScreenshot(bitmap: Bitmap) {
         viewModelScope.launch {
             _ocrState.value = OcrScanUiState.Scanning
+
+            // 1. Fast on-device ML Kit OCR fallback/primary
+            var localExtracted: ExtractedStravaMetrics? = null
             try {
-                val response = withTimeout(60_000L) {
+                localExtracted = StravaLocalOcrParser.parseStravaImage(bitmap)
+                if (localExtracted != null && (localExtracted.distanceKm > 0 || localExtracted.durationSeconds > 0)) {
+                    _ocrState.value = OcrScanUiState.Extracted(localExtracted)
+                    Log.d(TAG, "Local ML Kit OCR extracted successfully: $localExtracted")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Local ML Kit OCR parsing error", e)
+            }
+
+            // 2. In parallel/subsequently, attempt Gemini AI Vision to enrich insights or as fallback
+            try {
+                val maxDim = 1080
+                val scaledBitmap = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                    val ratio = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+                    val newW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+                    val newH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+                    Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+                } else {
+                    bitmap
+                }
+
+                val response = withTimeout(30_000L) {
                     ocrGenerativeModel.generateContent(
                         content {
-                            image(bitmap)
+                            image(scaledBitmap)
                             text(
-                                "Extract all running workout telemetry from this Strava activity screenshot into the required JSON schema. " +
+                                "Extract running workout telemetry from this screenshot into the required JSON schema. " +
+                                    "If distance is not explicitly shown, calculate it from duration and pace (distance = duration / pace). " +
                                     "Convert distance to kilometers, duration to total seconds, and pace to seconds per kilometer. " +
-                                    "Provide a specific, physiological coaching insight based on the splits, pace, heart rate, and cadence."
+                                    "Extract per-kilometer splits if visible. " +
+                                    "For 'aiCoachingInsight', provide an in-depth, structured, and actionable evaluation in Indonesian (with pacing analysis, biomechanical/cadence observation, and specific recommendations for the next workout)."
                             )
                         }
                     )
                 }
                 val jsonText = response.text
-                if (jsonText.isNullOrBlank()) {
-                    _ocrState.value = OcrScanUiState.Error("Gemini returned an empty OCR response.")
-                    return@launch
-                }
-                val json = JSONObject(jsonText)
-                val distKm = json.optDouble("distanceKm", 10.0).coerceIn(0.1, 500.0)
-                val durSec = json.optLong("durationSeconds", 2400L).coerceIn(1L, 864000L)
-                val paceSec = json.optLong(
-                    "avgPaceSecondsPerKm",
-                    (durSec / distKm).roundToLong()
-                ).coerceIn(60L, 3600L)
+                if (!jsonText.isNullOrBlank()) {
+                    val json = JSONObject(jsonText)
+                    val distKm = json.optDouble("distanceKm", 0.0).coerceIn(0.0, 500.0)
+                    val durSec = json.optLong("durationSeconds", 0L).coerceIn(0L, 864000L)
+                    val paceSec = json.optLong(
+                        "avgPaceSecondsPerKm",
+                        if (distKm > 0.0) (durSec / distKm).roundToLong() else 0L
+                    ).coerceIn(0L, 3600L)
 
-                val extracted = ExtractedStravaMetrics(
-                    title = json.optString("title", "Strava OCR Workout").ifBlank { "Strava OCR Workout" },
-                    distanceKm = distKm,
-                    durationSeconds = durSec,
-                    avgPaceSecondsPerKm = paceSec,
-                    avgHeartRate = json.optLong("avgHeartRate", 168L).coerceIn(0L, 260L),
-                    cadenceSpm = json.optLong("cadenceSpm", 182L).coerceIn(0L, 300L),
-                    elevationGainM = json.optLong("elevationGainM", 55L).coerceIn(0L, 20000L),
-                    splitsSummary = json.optString("splitsSummary", "Splits extracted via Gemini Vision"),
-                    aiCoachingInsight = json.optString(
-                        "aiCoachingInsight",
-                        "Solid aerobic execution with consistent pacing."
+                    val localDist = localExtracted?.distanceKm ?: 0.0
+                    val finalDistKm = if (localDist > 1.0 && distKm <= 1.0) {
+                        localDist
+                    } else if (distKm > 0.0) {
+                        distKm
+                    } else if (durSec > 0 && paceSec > 0) {
+                        (durSec.toDouble() / paceSec.toDouble())
+                    } else {
+                        if (localDist > 0.0) localDist else 4.0
+                    }
+
+                    val enriched = ExtractedStravaMetrics(
+                        title = json.optString("title", localExtracted?.title ?: "Strava Run").ifBlank { localExtracted?.title ?: "Strava Run" },
+                        distanceKm = if (finalDistKm > 0.0) finalDistKm else (localExtracted?.distanceKm ?: 4.0),
+                        durationSeconds = if (durSec > 0) durSec else (localExtracted?.durationSeconds ?: 1800L),
+                        avgPaceSecondsPerKm = if (paceSec > 0) paceSec else (localExtracted?.avgPaceSecondsPerKm ?: 450L),
+                        avgHeartRate = maxOf(json.optLong("avgHeartRate", 0L), localExtracted?.avgHeartRate ?: 0L).coerceIn(0L, 260L),
+                        cadenceSpm = maxOf(json.optLong("cadenceSpm", 0L), localExtracted?.cadenceSpm ?: 0L).coerceIn(0L, 300L),
+                        elevationGainM = maxOf(json.optLong("elevationGainM", 0L), localExtracted?.elevationGainM ?: 0L).coerceIn(0L, 20000L),
+                        splitsSummary = if (!localExtracted?.splitsSummary.isNullOrBlank()) localExtracted!!.splitsSummary else json.optString("splitsSummary", ""),
+                        aiCoachingInsight = json.optString("aiCoachingInsight", localExtracted?.aiCoachingInsight ?: "Pacing konsisten."),
+                        workoutDateEpochMs = localExtracted?.workoutDateEpochMs,
+                        detectedDateStr = localExtracted?.detectedDateStr.orEmpty()
                     )
-                )
-                _ocrState.value = OcrScanUiState.Extracted(extracted)
-            } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Strava OCR timed out", e)
-                _ocrState.value = OcrScanUiState.Error("AI screenshot extraction timed out after 60 seconds. Please try again.")
-            } catch (e: CancellationException) {
-                throw e
+                    _ocrState.value = OcrScanUiState.Extracted(enriched)
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Strava OCR extraction failed", e)
-                _ocrState.value = OcrScanUiState.Error(e.localizedMessage ?: "Failed to extract Strava screenshot metrics.")
+                if (localExtracted != null && (localExtracted.distanceKm > 0 || localExtracted.durationSeconds > 0)) {
+                    Log.i(TAG, "Gemini call failed (${e.localizedMessage}), but local ML Kit OCR result is preserved.")
+                } else {
+                    Log.e(TAG, "Both ML Kit and Gemini OCR failed", e)
+                    val message = when (e) {
+                        is TimeoutCancellationException -> "Ekstraksi AI melebihi batas waktu. Data lokal tidak terdeteksi. Silakan isi form di bawah atau kirim foto layar utama Strava (Distance, Time, Pace)."
+                        else -> e.localizedMessage ?: "Gagal mengekstrak data screenshot."
+                    }
+                    _ocrState.value = OcrScanUiState.Error(message)
+                }
             }
         }
     }
@@ -294,6 +376,7 @@ class StrideApexViewModel(
         splitsSummary: String,
         aiCoachingInsight: String,
         sourceType: String,
+        workoutDateEpochMs: Long? = null,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -301,6 +384,11 @@ class StrideApexViewModel(
                 val safeDist = distanceKm.coerceIn(0.1, 500.0)
                 val safeDur = durationSeconds.coerceIn(1L, 864000L)
                 val avgPace = (safeDur / safeDist).roundToLong().coerceIn(60L, 3600L)
+                val createdTs = if (workoutDateEpochMs != null && workoutDateEpochMs > 0L) {
+                    com.google.firebase.Timestamp(java.util.Date(workoutDateEpochMs))
+                } else {
+                    com.google.firebase.Timestamp.now()
+                }
                 val workout = WorkoutLog(
                     userId = currentUserId ?: "offline_local_user",
                     title = title.ifBlank { "Training Run" },
@@ -312,7 +400,8 @@ class StrideApexViewModel(
                     elevationGainM = elevationGainM,
                     splitsSummary = splitsSummary,
                     aiCoachingInsight = aiCoachingInsight,
-                    sourceType = sourceType
+                    sourceType = sourceType,
+                    createdAt = createdTs
                 )
 
                 // Always persist locally in Room SQLite first for instant offline availability
@@ -321,35 +410,11 @@ class StrideApexViewModel(
                     cloudRepository.addWorkout(workout)
                 }
 
-                // Check if this workout matches a standard PR distance bucket (within 8% tolerance)
-                val matchedCategory = DistanceCategory.entries.firstOrNull { cat ->
-                    abs(safeDist - cat.kilometers) / cat.kilometers <= 0.08
-                }
-                var prNewBanner: String? = null
-                if (matchedCategory != null) {
-                    val normalizedTimeSec = (avgPace * matchedCategory.kilometers).roundToLong()
-                    val existingPrs = (prsState.value as? UiState.Success)?.data.orEmpty()
-                    val existingForCat = existingPrs.firstOrNull { it.distanceCategory == matchedCategory.key }
-                    if (existingForCat == null || normalizedTimeSec < existingForCat.bestTimeSeconds) {
-                        val newPr = PersonalRecord(
-                            userId = currentUserId ?: "offline_local_user",
-                            distanceCategory = matchedCategory.key,
-                            distanceMeters = matchedCategory.meters,
-                            bestTimeSeconds = normalizedTimeSec,
-                            previousTimeSeconds = existingForCat?.bestTimeSeconds ?: 0L,
-                            paceSecondsPerKm = avgPace,
-                            workoutTitle = workout.title
-                        )
-                        localRepository.upsertPersonalRecord(newPr)
-                        if (!isOfflineMode && cloudRepository != null) {
-                            cloudRepository.upsertPersonalRecord(newPr)
-                        }
-                        prNewBanner = "New ${matchedCategory.shortLabel} Personal Record logged!"
-                    }
-                }
+                // Strictly recalculate PRs from workout history
+                recalculatePrsFromRemainingWorkouts()
 
-                val storageTarget = if (isOfflineMode) "Local SQLite Database" else "Cloud Firestore & Local SQLite"
-                _statusBanner.value = prNewBanner ?: "Workout '${workout.title}' saved to $storageTarget."
+                val storageTarget = if (isOfflineMode) "Database SQLite Lokal" else "Cloud Firestore & SQLite"
+                _statusBanner.value = "Sesi '${workout.title}' disimpan ke $storageTarget."
                 _ocrState.value = OcrScanUiState.Idle
                 onComplete()
             } catch (e: CancellationException) {
@@ -366,13 +431,179 @@ class StrideApexViewModel(
             try {
                 localRepository.deleteWorkout(workoutId)
                 if (!isOfflineMode && cloudRepository != null) {
-                    cloudRepository.deleteWorkout(workoutId)
+                    try {
+                        cloudRepository.deleteWorkout(workoutId)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error deleting cloud workout", e)
+                    }
                 }
+
+                // Automatically recalculate or remove PRs when workouts in history are deleted
+                recalculatePrsFromRemainingWorkouts()
+
                 _statusBanner.value = "Workout deleted."
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _statusBanner.value = "Error deleting workout: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun updateWorkout(
+        workoutId: String,
+        title: String,
+        distanceKm: Double,
+        durationSeconds: Long,
+        avgHeartRate: Long,
+        cadenceSpm: Long,
+        elevationGainM: Long,
+        workoutDateEpochMs: Long? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val currentList = (workoutsState.value as? UiState.Success)?.data.orEmpty()
+                val existing = currentList.firstOrNull { it.id == workoutId }
+                val safeDist = distanceKm.coerceIn(0.1, 500.0)
+                val safeDur = durationSeconds.coerceIn(1L, 864000L)
+                val avgPace = (safeDur / safeDist).roundToLong().coerceIn(60L, 3600L)
+                val createdTs = if (workoutDateEpochMs != null && workoutDateEpochMs > 0L) {
+                    com.google.firebase.Timestamp(java.util.Date(workoutDateEpochMs))
+                } else {
+                    existing?.createdAt ?: com.google.firebase.Timestamp.now()
+                }
+
+                val updated = (existing ?: WorkoutLog(id = workoutId, userId = currentUserId ?: "offline_local_user")).copy(
+                    title = title.ifBlank { "Training Run" },
+                    distanceKm = safeDist,
+                    durationSeconds = safeDur,
+                    avgPaceSecondsPerKm = avgPace,
+                    avgHeartRate = avgHeartRate,
+                    cadenceSpm = cadenceSpm,
+                    elevationGainM = elevationGainM,
+                    createdAt = createdTs
+                )
+
+                localRepository.updateWorkout(updated)
+                if (!isOfflineMode && cloudRepository != null) {
+                    try {
+                        cloudRepository.updateWorkout(updated)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error updating cloud workout", e)
+                    }
+                }
+
+                // Strictly recalculate PRs from remaining/updated workout history
+                recalculatePrsFromRemainingWorkouts()
+
+                _statusBanner.value = "Riwayat '${updated.title}' berhasil diperbarui."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update workout", e)
+                _statusBanner.value = "Gagal memperbarui riwayat: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    private suspend fun recalculatePrsFromRemainingWorkouts() {
+        val remainingWorkouts = localRepository.getAllWorkoutsList()
+
+        if (remainingWorkouts.isEmpty()) {
+            localRepository.deleteAllPersonalRecords()
+            if (!isOfflineMode && cloudRepository != null) {
+                try {
+                    cloudRepository.deleteAllPersonalRecords()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to clean PRs from cloud", e)
+                }
+            }
+            return
+        }
+
+        for (category in DistanceCategory.entries) {
+            val docId = "pr_${category.key.lowercase()}"
+            // Workouts qualifying for this category (distance >= 85% of category distance)
+            // e.g. A 10K workout qualifies for BOTH 10K (>= 8.5) and 5K (>= 4.25)!
+            val qualifying = remainingWorkouts.filter { w ->
+                w.distanceKm >= (category.kilometers * 0.85)
+            }
+
+            if (qualifying.isEmpty()) {
+                // If no remaining workout satisfies this distance, remove the PR
+                localRepository.deletePersonalRecord(docId)
+                localRepository.deletePersonalRecordByCategory(category.key)
+                if (!isOfflineMode && cloudRepository != null) {
+                    try {
+                        cloudRepository.deletePersonalRecordByCategory(category.key)
+                        cloudRepository.deletePersonalRecord(docId)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to delete PR from cloud", e)
+                    }
+                }
+            } else {
+                // Find the best time among qualifying workouts
+                val best = qualifying.minByOrNull { w ->
+                    val safePace = if (w.avgPaceSecondsPerKm in 60..3600) {
+                        w.avgPaceSecondsPerKm
+                    } else if (w.distanceKm > 0.0) {
+                        (w.durationSeconds / w.distanceKm).roundToLong().coerceIn(60L, 3600L)
+                    } else {
+                        3600L
+                    }
+                    (safePace * category.kilometers).roundToLong()
+                }
+                if (best != null) {
+                    val safePace = if (best.avgPaceSecondsPerKm in 60..3600) {
+                        best.avgPaceSecondsPerKm
+                    } else if (best.distanceKm > 0.0) {
+                        (best.durationSeconds / best.distanceKm).roundToLong().coerceIn(60L, 3600L)
+                    } else {
+                        300L
+                    }
+                    val normalizedBestTime = (safePace * category.kilometers).roundToLong().coerceAtLeast(1L)
+                    val pr = PersonalRecord(
+                        id = docId,
+                        userId = currentUserId ?: "offline_local_user",
+                        distanceCategory = category.key,
+                        distanceMeters = category.meters,
+                        bestTimeSeconds = normalizedBestTime,
+                        previousTimeSeconds = 0L,
+                        paceSecondsPerKm = safePace,
+                        workoutTitle = best.title
+                    )
+                    localRepository.upsertPersonalRecord(pr)
+                    if (!isOfflineMode && cloudRepository != null) {
+                        try {
+                            cloudRepository.upsertPersonalRecord(pr)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to sync PR to cloud", e)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun deletePersonalRecord(categoryKey: String) {
+        viewModelScope.launch {
+            try {
+                val docId = "pr_${categoryKey.lowercase()}"
+                localRepository.deletePersonalRecord(docId)
+                localRepository.deletePersonalRecordByCategory(categoryKey)
+                if (!isOfflineMode && cloudRepository != null) {
+                    try {
+                        cloudRepository.deletePersonalRecordByCategory(categoryKey)
+                        cloudRepository.deletePersonalRecord(docId)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to delete PR from cloud", e)
+                    }
+                }
+                _statusBanner.value = "Personal Record $categoryKey berhasil dihapus."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _statusBanner.value = "Failed to remove PR: ${e.localizedMessage}"
             }
         }
     }
@@ -472,6 +703,117 @@ class StrideApexViewModel(
                 throw e
             } catch (e: Exception) {
                 _statusBanner.value = "Failed to delete goal: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun saveOrUpdateGoalSchedule(
+        goalId: String?,
+        cleanTitle: String,
+        category: DistanceCategory,
+        targetTimeSeconds: Long,
+        weeklyMileageKm: Long,
+        startDateKey: String,
+        targetDateKey: String,
+        trainingDaysIso: List<Int>
+    ) {
+        viewModelScope.launch {
+            try {
+                val encodedTitle = GoalTrainingPlanEngine.encodeGoalTitleWithSchedule(
+                    cleanTitle = cleanTitle,
+                    targetDateKey = targetDateKey,
+                    trainingDaysIso = trainingDaysIso,
+                    startDateKey = startDateKey
+                )
+                if (!goalId.isNullOrBlank()) {
+                    val currentGoals = (goalsState.value as? UiState.Success)?.data.orEmpty()
+                    val existing = currentGoals.firstOrNull { it.id == goalId }
+                    if (existing != null) {
+                        val updated = existing.copy(
+                            title = encodedTitle,
+                            targetDistanceCategory = category.key,
+                            targetTimeSeconds = targetTimeSeconds,
+                            weeklyMileageTargetKm = weeklyMileageKm
+                        )
+                        localRepository.updateGoal(updated)
+                        if (!isOfflineMode && cloudRepository != null) {
+                            cloudRepository.updateGoal(updated)
+                        }
+                        _statusBanner.value = "Jadwal target '$cleanTitle' berhasil diperbarui."
+                        return@launch
+                    }
+                }
+
+                // If new goal
+                val newGoal = TrainingGoal(
+                    userId = currentUserId ?: "offline_local_user",
+                    title = encodedTitle,
+                    targetDistanceCategory = category.key,
+                    targetTimeSeconds = targetTimeSeconds,
+                    weeklyMileageTargetKm = weeklyMileageKm,
+                    reminderEnabled = true,
+                    reminderHour = 7L,
+                    reminderMinute = 0L,
+                    completed = false
+                )
+                localRepository.addGoal(newGoal)
+                if (!isOfflineMode && cloudRepository != null) {
+                    cloudRepository.addGoal(newGoal)
+                }
+                _statusBanner.value = "Target '$cleanTitle' & jadwal adaptif AI berhasil disimpan."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save or update goal schedule", e)
+                _statusBanner.value = "Gagal menyimpan jadwal target: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun askGeminiForTrainingPlanAdvice(goal: TrainingGoal) {
+        viewModelScope.launch {
+            _aiPlanLoading.value = true
+            try {
+                val workouts = (workoutsState.value as? UiState.Success)?.data.orEmpty()
+                val meta = GoalTrainingPlanEngine.parseGoalMetadata(goal)
+                val targetDuration = RacePredictionEngine.formatDuration(goal.targetTimeSeconds)
+                val category = DistanceCategory.fromKey(goal.targetDistanceCategory)
+                val paceSec = (goal.targetTimeSeconds / category.kilometers).toLong()
+                val targetPace = RacePredictionEngine.formatPace(paceSec)
+
+                val prompt = buildString {
+                    append("Anda adalah Pelatih Lari Maraton Profesional bersertifikasi IAFF (AI Running Coach). ")
+                    append("Atlet memiliki target: '${meta.cleanTitle}' (${category.displayName}) dengan target waktu $targetDuration (Pace $targetPace/km). ")
+                    append("Periode latihan: ${meta.startDateDisplay} s/d hari perlombaan ${meta.targetDateDisplay} (Sisa ${meta.daysRemaining} hari). ")
+                    append("Frekuensi latihan mingguan: ${meta.trainingDaysIso.size}x per minggu pada hari: ")
+                    append(meta.trainingDaysIso.joinToString(", ") { GoalTrainingPlanEngine.dayNameId(it) })
+                    append(".\n")
+                    if (workouts.isNotEmpty()) {
+                        append("Riwayat latihan aktual atlet (${workouts.size} sesi tercatat di Strava): ")
+                        workouts.take(4).forEach { w ->
+                            append("- ${w.title}: ${"%.2f".format(w.distanceKm)} km, Pace ${RacePredictionEngine.formatPace(w.avgPaceSecondsPerKm)}/km, HR ${w.avgHeartRate} bpm. ")
+                        }
+                    } else {
+                        append("Belum ada riwayat lari yang di-upload sebelumnya. Mulai dari pembangunan aerobik dasar.")
+                    }
+                    append("\nBerikan analisis periodisasi adaptif yang ringkas dan padat (maksimal 3 paragraf singkat dalam Bahasa Indonesia): ")
+                    append("1. Strategi pembagian sesi (kapan harus Recovery Run agar terhindar dari cedera, dan kapan aman Interval/Tempo). ")
+                    append("2. Penyesuaian tapering pada 7 hari sebelum race day. ")
+                    append("3. Rekomendasi hidrasi dan pemulihan glikogen.")
+                }
+
+                val response = withTimeout(30_000L) {
+                    coachGenerativeModel.generateContent(prompt)
+                }
+                val text = response.text
+                if (!text.isNullOrBlank()) {
+                    _aiPlanCoachingInsight.value = text
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Gemini plan coaching advice failed", e)
+                _aiPlanCoachingInsight.value = "AI Adaptive Engine: Jadwal latihan harian Anda telah dihitung secara adaptif berdasarkan riwayat lari. Sesi intensif (Interval/Tempo) akan otomatis beradaptasi menjadi Recovery jika sistem mendeteksi beban kelelahan tinggi."
+            } finally {
+                _aiPlanLoading.value = false
             }
         }
     }

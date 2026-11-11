@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "514062880003",
+    "project_id": "com-aistudio-strideapex-5c43f",
+    "storage_bucket": "com-aistudio-strideapex-5c43f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:514062880003:android:ee05b3641a61bf0c28ad36",
+        "android_client_info": {
+          "package_name": "com.aistudio.strideapex.vkrqzm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "514062880003-ai6mr0ri0e86ugvb0ftdrvndob04ids1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtD4WNaGWHdqDg157pVZENFQPVcdh3J2E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "514062880003-ai6mr0ri0e86ugvb0ftdrvndob04ids1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

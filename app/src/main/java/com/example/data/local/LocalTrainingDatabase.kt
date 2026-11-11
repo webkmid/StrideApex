@@ -151,6 +151,18 @@ interface LocalTrainingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPersonalRecord(pr: LocalPrEntity)
 
+    @Query("DELETE FROM local_personal_records WHERE id = :id")
+    suspend fun deletePersonalRecordById(id: String)
+
+    @Query("DELETE FROM local_personal_records WHERE distanceCategory = :category")
+    suspend fun deletePersonalRecordByCategory(category: String)
+
+    @Query("DELETE FROM local_personal_records")
+    suspend fun deleteAllPersonalRecords()
+
+    @Query("SELECT * FROM local_workouts ORDER BY createdAtEpochMs DESC")
+    suspend fun getAllWorkouts(): List<LocalWorkoutEntity>
+
     @Query("SELECT * FROM local_goals ORDER BY createdAtEpochMs DESC")
     fun observeGoals(): Flow<List<LocalGoalEntity>>
 
@@ -174,7 +186,7 @@ interface LocalTrainingDao {
         LocalGoalEntity::class,
         LocalBackupEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class StrideApexLocalDatabase : RoomDatabase() {
@@ -191,7 +203,7 @@ abstract class StrideApexLocalDatabase : RoomDatabase() {
                     StrideApexLocalDatabase::class.java,
                     "strideapex_offline.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(true)
                     .build()
                     .also { INSTANCE = it }
             }

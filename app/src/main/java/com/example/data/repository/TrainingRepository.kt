@@ -222,62 +222,95 @@ class TrainingRepository(private val db: FirebaseFirestore) {
 
     suspend fun upsertPersonalRecord(pr: PersonalRecord): String {
         val uid = requireUserId()
-        val docId = "pr_${pr.distanceCategory.lowercase()}"
-        val docRef = db.collection("users").document(uid).collection("personalRecords").document(docId)
+        val category = DistanceCategory.fromKey(pr.distanceCategory)
+        val docId = "pr_${category.key.lowercase()}"
+        val colRef = db.collection("users").document(uid).collection("personalRecords")
+        val docRef = colRef.document(docId)
+
+        // Delete any other duplicate documents with this distanceCategory to ensure strict 1-to-1 mapping
+        try {
+            val snap = colRef.whereEqualTo("distanceCategory", category.key).get().await()
+            for (doc in snap.documents) {
+                if (doc.id != docId) {
+                    doc.reference.delete().await()
+                }
+            }
+        } catch (e: Exception) {
+            // Best effort cleanup
+        }
+
         val existingSnap = try {
             docRef.get().await()
         } catch (e: Exception) {
             null
         }
-        val category = DistanceCategory.fromKey(pr.distanceCategory)
-        if (existingSnap != null && existingSnap.exists()) {
-            val existingPr = existingSnap.toObject(
-                PersonalRecord::class.java,
-                DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-            )
-            if (existingPr != null && existingPr.createdAt != null) {
-                val updatedModel = existingPr.copy(
-                    id = docId,
-                    userId = uid,
-                    distanceCategory = category.key,
-                    distanceMeters = category.meters,
-                    bestTimeSeconds = pr.bestTimeSeconds.coerceIn(1L, 864000L),
-                    previousTimeSeconds = existingPr.bestTimeSeconds.coerceIn(0L, 864000L),
-                    paceSecondsPerKm = pr.paceSecondsPerKm.coerceIn(60L, 3600L),
-                    workoutTitle = pr.workoutTitle.trim().take(120).ifBlank { "PR Effort" },
-                    updatedAt = null
-                )
-                try {
-                    docRef.set(updatedModel).await()
-                    return docId
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    handleFirestoreError(e, OperationType.UPDATE, docRef.path)
-                    throw e
-                }
-            }
+
+        val prevTime = if (existingSnap != null && existingSnap.exists()) {
+            val oldBest = existingSnap.getLong("bestTimeSeconds") ?: 0L
+            if (oldBest > 0L && oldBest != pr.bestTimeSeconds) oldBest else pr.previousTimeSeconds
+        } else {
+            pr.previousTimeSeconds
         }
 
-        val createPayload = mapOf(
+        val payload = mapOf(
             "userId" to uid,
             "distanceCategory" to category.key,
             "distanceMeters" to category.meters,
             "bestTimeSeconds" to pr.bestTimeSeconds.coerceIn(1L, 864000L),
-            "previousTimeSeconds" to pr.previousTimeSeconds.coerceIn(0L, 864000L),
+            "previousTimeSeconds" to prevTime.coerceIn(0L, 864000L),
             "paceSecondsPerKm" to pr.paceSecondsPerKm.coerceIn(60L, 3600L),
             "workoutTitle" to pr.workoutTitle.trim().take(120).ifBlank { "PR Effort" },
-            "createdAt" to FieldValue.serverTimestamp(),
+            "createdAt" to (existingSnap?.getTimestamp("createdAt") ?: FieldValue.serverTimestamp()),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
-            docRef.set(createPayload).await()
+            docRef.set(payload).await()
             return docId
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
             throw e
+        }
+    }
+
+    suspend fun deletePersonalRecord(docId: String) {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid).collection("personalRecords").document(docId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deletePersonalRecordByCategory(categoryKey: String) {
+        val uid = requireUserId()
+        val colRef = db.collection("users").document(uid).collection("personalRecords")
+        try {
+            val snap = colRef.whereEqualTo("distanceCategory", categoryKey).get().await()
+            for (doc in snap.documents) {
+                doc.reference.delete().await()
+            }
+            colRef.document("pr_${categoryKey.lowercase()}").delete().await()
+        } catch (e: Exception) {
+            // Best effort
+        }
+    }
+
+    suspend fun deleteAllPersonalRecords() {
+        val uid = requireUserId()
+        val colRef = db.collection("users").document(uid).collection("personalRecords")
+        try {
+            val snap = colRef.get().await()
+            for (doc in snap.documents) {
+                doc.reference.delete().await()
+            }
+        } catch (e: Exception) {
+            // Best effort
         }
     }
 
@@ -380,107 +413,6 @@ class TrainingRepository(private val db: FirebaseFirestore) {
     }
 
     suspend fun seedInitialStarterData() {
-        val uid = requireUserId()
-        val existingWorkouts = try {
-            db.collection("users").document(uid).collection("workouts").limit(1).get().await()
-        } catch (e: Exception) {
-            null
-        }
-        if (existingWorkouts != null && !existingWorkouts.isEmpty) return
-
-        val starterWorkouts = listOf(
-            WorkoutLog(
-                userId = uid,
-                title = "Strava Track Threshold 10K",
-                distanceKm = 10.0,
-                durationSeconds = 2380L,
-                avgPaceSecondsPerKm = 238L,
-                avgHeartRate = 171L,
-                cadenceSpm = 184L,
-                elevationGainM = 42L,
-                splitsSummary = "KM 1-3: 4:02/km | KM 4-7: 3:58/km | KM 8-10: 3:53/km",
-                aiCoachingInsight = "High mechanical efficiency at 184 SPM. Negative 9s/km split indicates strong lactate clearance.",
-                sourceType = "STRAVA_OCR"
-            ),
-            WorkoutLog(
-                userId = uid,
-                title = "Sunday Aerobic Long Progression",
-                distanceKm = 21.1,
-                durationSeconds = 5486L,
-                avgPaceSecondsPerKm = 260L,
-                avgHeartRate = 158L,
-                cadenceSpm = 178L,
-                elevationGainM = 165L,
-                splitsSummary = "KM 1-10: 4:26/km | KM 11-18: 4:16/km | KM 19-21.1: 4:08/km",
-                aiCoachingInsight = "Minimal cardiac drift (<3%) over 21.1km. Ready for sub-1:30 Half Marathon pacing.",
-                sourceType = "STRAVA_OCR"
-            ),
-            WorkoutLog(
-                userId = uid,
-                title = "VO2 Max 5K Time Trial",
-                distanceKm = 5.0,
-                durationSeconds = 1125L,
-                avgPaceSecondsPerKm = 225L,
-                avgHeartRate = 179L,
-                cadenceSpm = 188L,
-                elevationGainM = 18L,
-                splitsSummary = "KM 1: 3:44 | KM 2: 3:46 | KM 3: 3:47 | KM 4: 3:45 | KM 5: 3:43",
-                aiCoachingInsight = "Elite pacing discipline with 4-second spread across all 5 splits and crisp midfoot turnover.",
-                sourceType = "STRAVA_OCR"
-            )
-        )
-
-        starterWorkouts.forEach { addWorkout(it) }
-
-        val starterPrs = listOf(
-            PersonalRecord(
-                userId = uid,
-                distanceCategory = "5K",
-                distanceMeters = 5000L,
-                bestTimeSeconds = 1125L,
-                previousTimeSeconds = 1162L,
-                paceSecondsPerKm = 225L,
-                workoutTitle = "VO2 Max 5K Time Trial"
-            ),
-            PersonalRecord(
-                userId = uid,
-                distanceCategory = "10K",
-                distanceMeters = 10000L,
-                bestTimeSeconds = 2380L,
-                previousTimeSeconds = 2445L,
-                paceSecondsPerKm = 238L,
-                workoutTitle = "Strava Track Threshold 10K"
-            ),
-            PersonalRecord(
-                userId = uid,
-                distanceCategory = "HALF_MARATHON",
-                distanceMeters = 21097L,
-                bestTimeSeconds = 5486L,
-                previousTimeSeconds = 5610L,
-                paceSecondsPerKm = 260L,
-                workoutTitle = "Sunday Aerobic Long Progression"
-            )
-        )
-        starterPrs.forEach { upsertPersonalRecord(it) }
-
-        val starterGoal = TrainingGoal(
-            userId = uid,
-            title = "Sub-39:00 10K Road Championship",
-            targetDistanceCategory = "10K",
-            targetTimeSeconds = 2340L,
-            weeklyMileageTargetKm = 65L,
-            reminderEnabled = true,
-            reminderHour = 7L,
-            reminderMinute = 30L,
-            completed = false
-        )
-        addGoal(starterGoal)
-
-        createCloudBackupSnapshot(
-            label = "Initial Cloud Sync Baseline",
-            workouts = starterWorkouts,
-            prs = starterPrs,
-            goals = listOf(starterGoal)
-        )
+        // Starter dummy data removed so the app starts completely clean
     }
 }
