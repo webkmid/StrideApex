@@ -83,20 +83,20 @@ val Typography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.3.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = TelemetryMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.3.sp
+        letterSpacing = 0.2.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = TelemetryMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.2.sp
     )
 )

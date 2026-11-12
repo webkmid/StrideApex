@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,13 +28,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.EventNote
@@ -77,10 +78,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.CloudBackupSnapshot
 import com.example.data.model.DistanceCategory
 import com.example.data.model.PersonalRecord
@@ -96,6 +100,7 @@ import com.example.ui.components.StravaSplitsBarChart
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.KineticCoral
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.OnVoltLime
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
@@ -263,7 +268,10 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(20.dp))
-                        .clickable { selectedGoalForScheduleScreen = todayGoal }
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Buka Jadwal Latihan Hari Ini"
+                        ) { selectedGoalForScheduleScreen = todayGoal }
                         .border(1.5.dp, VoltLime, RoundedCornerShape(20.dp)),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = SlateSurfaceElevated)
@@ -347,7 +355,7 @@ fun DashboardScreen(
                             overflow = TextOverflow.Ellipsis
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -355,43 +363,63 @@ fun DashboardScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Text(
-                                    text = "TARGET PACE:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = "${RacePredictionEngine.formatPace(todaySession.targetPaceSecondsPerKm)}/km",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontFamily = TelemetryMonoFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    color = VoltLime,
-                                    maxLines = 1
-                                )
+                                if (todaySession.recommendedDistanceKm > 0) {
+                                    Column {
+                                        Text(
+                                            text = "TARGET JARAK",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary,
+                                            fontSize = 9.sp
+                                        )
+                                        Text(
+                                            text = "${String.format(Locale.US, "%.1f", todaySession.recommendedDistanceKm)} km",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontFamily = TelemetryMonoFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Column {
+                                    Text(
+                                        text = "TARGET PACE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        fontSize = 9.sp
+                                    )
+                                    Text(
+                                        text = RacePredictionEngine.formatPace(todaySession.targetPaceSecondsPerKm),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontFamily = TelemetryMonoFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        color = VoltLime
+                                    )
+                                }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = { selectedGoalForScheduleScreen = todayGoal },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.CalendarMonth, contentDescription = null, tint = AeroCyan, modifier = Modifier.size(14.dp))
+                                    Icon(imageVector = Icons.Default.CalendarMonth, contentDescription = null, tint = AeroCyan, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Jadwal", style = MaterialTheme.typography.labelSmall, color = AeroCyan, maxLines = 1)
                                 }
                                 Button(
                                     onClick = onNavigateToOcr,
                                     colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = Color.Black),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AddAPhoto,
                                         contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Scan", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -413,6 +441,7 @@ fun DashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
+                    // 1. Total Distance Hero Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -420,36 +449,61 @@ fun DashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = "TOTAL DISTANCE",
+                                text = "TOTAL JARAK TEMPUH",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextSecondary,
+                                letterSpacing = 0.5.sp
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${"%.1f".format(totalVolumeKm)} km",
                                 style = MaterialTheme.typography.headlineLarge,
                                 fontFamily = TelemetryMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
                                 color = VoltLime
                             )
                         }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            SummaryStatBadge(
-                                label = "RUNS",
-                                value = "${workouts.size}",
-                                color = Color.White
-                            )
-                            SummaryStatBadge(
-                                label = "PRs",
-                                value = "${prs.size}",
-                                color = AeroCyan
-                            )
-                            SummaryStatBadge(
-                                label = "VDOT",
-                                value = currentVdot?.let { "%.1f".format(it) } ?: "--",
+                        Surface(
+                            color = VoltLime.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Semua Sesi",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = VoltLime,
-                                onClick = { showVdotDialog = true }
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 2. Three Balanced Metric Tiles (RUNS, PRs, VDOT)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SummaryStatBadge(
+                            label = "RUNS",
+                            value = "${workouts.size}",
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryStatBadge(
+                            label = "PRs",
+                            value = "${prs.size}",
+                            color = AeroCyan,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryStatBadge(
+                            label = "VDOT",
+                            value = currentVdot?.let { "%.1f".format(it) } ?: "--",
+                            color = VoltLime,
+                            onClick = { showVdotDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     if (activeGoal != null) {
@@ -502,30 +556,33 @@ fun DashboardScreen(
                             onClick = onNavigateToOcr,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = VoltLime,
-                                contentColor = Color.Black
+                                contentColor = OnVoltLime
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("hero_scan_strava_button")
+                                .defaultMinSize(minHeight = 44.dp)
+                                .testTag("hero_scan_strava_button"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AddAPhoto,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Scan Run", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Scan Run", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
 
                         OutlinedButton(
                             onClick = onNavigateToPredict,
                             shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("hero_race_predictor_button")
+                                .defaultMinSize(minHeight = 44.dp)
+                                .testTag("hero_race_predictor_button"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Speed,
@@ -533,8 +590,8 @@ fun DashboardScreen(
                                 tint = AeroCyan,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("PR & Target", style = MaterialTheme.typography.labelMedium, color = AeroCyan, maxLines = 1)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("PR & Target", style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1)
                         }
                     }
                 }
@@ -613,7 +670,10 @@ fun DashboardScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
-                                        .clickable { selectedGoalForScheduleScreen = goal }
+                                        .clickable(
+                                            role = Role.Button,
+                                            onClickLabel = "Buka Jadwal Target ${meta.cleanTitle}"
+                                        ) { selectedGoalForScheduleScreen = goal }
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(14.dp),
@@ -920,42 +980,61 @@ private fun SummaryStatBadge(
     label: String,
     value: String,
     color: Color,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = if (onClick != null) {
-            Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onClick() }
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        } else {
-            Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-        }
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextSecondary
+    Surface(
+        color = SlateSurfaceElevated,
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder.copy(alpha = 0.7f)),
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = "Lihat Info $label"
+                    ) { onClick() }
+                } else Modifier
             )
-            if (onClick != null) {
-                Spacer(modifier = Modifier.width(3.dp))
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Info $label",
-                    tint = AeroCyan,
-                    modifier = Modifier.size(11.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp, horizontal = 4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
                 )
+                if (onClick != null) {
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Info $label",
+                        tint = AeroCyan,
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
             }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = TelemetryMonoFontFamily,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                maxLines = 1
+            )
         }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontFamily = TelemetryMonoFontFamily,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
     }
 }
 
@@ -971,10 +1050,13 @@ private fun WorkoutTelemetryCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, SlateBorder, RoundedCornerShape(18.dp))
-            .clickable { onOpenDetail() }
+            .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "Buka Detail Sesi ${workout.title}"
+            ) { onOpenDetail() }
             .testTag("workout_card_${workout.id}"),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = SlateSurface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -988,14 +1070,14 @@ private fun WorkoutTelemetryCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        color = if (isStravaOcr) KineticCoral.copy(alpha = 0.2f) else AeroCyan.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(6.dp)
+                        color = if (isStravaOcr) KineticCoral.copy(alpha = 0.18f) else AeroCyan.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = if (isStravaOcr) "OCR" else "MANUAL",
+                            text = if (isStravaOcr) "Strava OCR" else "Manual",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isStravaOcr) KineticCoral else AeroCyan,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1012,7 +1094,7 @@ private fun WorkoutTelemetryCard(
                     IconButton(
                         onClick = onEdit,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(44.dp)
                             .testTag("edit_workout_${workout.id}")
                     ) {
                         Icon(
@@ -1025,7 +1107,7 @@ private fun WorkoutTelemetryCard(
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(44.dp)
                             .testTag("delete_workout_${workout.id}")
                     ) {
                         Icon(
@@ -1071,14 +1153,14 @@ private fun WorkoutTelemetryCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                        imageVector = Icons.Default.Insights,
                         contentDescription = null,
                         tint = VoltLime,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Lihat Detail, Grafik Pace, PR & Evaluasi AI",
+                        text = "Lihat Analisis Detail, Pace & Rekor",
                         style = MaterialTheme.typography.labelSmall,
                         color = AeroCyan
                     )
@@ -1315,6 +1397,30 @@ private fun DashboardAddGoalDialog(
     // Training frequency & day selection state (default: 3x per week - Selasa, Kamis, Minggu)
     var selectedDays by remember { mutableStateOf(listOf(2, 4, 7)) }
 
+    val context = LocalContext.current
+    val showDatePickerDialog = { initialKey: String, onDateSelected: (String) -> Unit ->
+        val cal = Calendar.getInstance()
+        try {
+            val parts = initialKey.split("-")
+            if (parts.size == 3) {
+                cal.set(Calendar.YEAR, parts[0].toInt())
+                cal.set(Calendar.MONTH, parts[1].toInt() - 1)
+                cal.set(Calendar.DAY_OF_MONTH, parts[2].toInt())
+            }
+        } catch (_: Exception) {}
+
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                onDateSelected(formatted)
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = VoltLime,
         unfocusedBorderColor = SlateBorder,
@@ -1375,72 +1481,71 @@ private fun DashboardAddGoalDialog(
                 OutlinedTextField(
                     value = titleText,
                     onValueChange = { titleText = it },
-                    label = { Text("Nama Target (contoh: Astra Run 10K)") },
-                    placeholder = { Text("Astra Run ${selectedCategory.shortLabel}") },
+                    label = { Text("Nama Target") },
+                    placeholder = { Text("Target Lari ${selectedCategory.shortLabel}") },
                     colors = fieldColors,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Target Event Date (YYYY-MM-DD)
+                // Target Event Date with DatePicker
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = targetDateKey,
-                        onValueChange = { targetDateKey = it },
-                        label = { Text("Tanggal Target Lomba (YYYY-MM-DD)") },
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        text = "Tanggal Target Lomba",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Quick 29th chip
-                        val date29Str = remember {
-                            val cal = Calendar.getInstance()
-                            if (cal.get(Calendar.DAY_OF_MONTH) > 29) {
-                                cal.add(Calendar.MONTH, 1)
+                    Surface(
+                        color = ObsidianBackground,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = "Pilih Tanggal Target Lomba"
+                            ) {
+                                showDatePickerDialog(targetDateKey) { targetDateKey = it }
                             }
-                            cal.set(Calendar.DAY_OF_MONTH, 29)
-                            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "TANGGAL TARGET",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    fontSize = 10.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = GoalTrainingPlanEngine.formatShortDate(targetDateKey),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Surface(
+                                color = VoltLime.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "Pilih Tanggal Target",
+                                        tint = VoltLime,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
-                        FilterChip(
-                            selected = targetDateKey == date29Str,
-                            onClick = { targetDateKey = date29Str },
-                            label = { Text("Tgl 29", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = VoltLime.copy(alpha = 0.25f),
-                                selectedLabelColor = VoltLime
-                            )
-                        )
-                        FilterChip(
-                            selected = targetDateKey == GoalTrainingPlanEngine.defaultTargetDateKey(14),
-                            onClick = { targetDateKey = GoalTrainingPlanEngine.defaultTargetDateKey(14) },
-                            label = { Text("+2 Mgg", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                selectedLabelColor = AeroCyan
-                            )
-                        )
-                        FilterChip(
-                            selected = targetDateKey == GoalTrainingPlanEngine.defaultTargetDateKey(21),
-                            onClick = { targetDateKey = GoalTrainingPlanEngine.defaultTargetDateKey(21) },
-                            label = { Text("+3 Mgg", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                selectedLabelColor = AeroCyan
-                            )
-                        )
-                        FilterChip(
-                            selected = targetDateKey == GoalTrainingPlanEngine.defaultTargetDateKey(28),
-                            onClick = { targetDateKey = GoalTrainingPlanEngine.defaultTargetDateKey(28) },
-                            label = { Text("+4 Mgg", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                selectedLabelColor = AeroCyan
-                            )
-                        )
                     }
                 }
 
@@ -1477,11 +1582,12 @@ private fun DashboardAddGoalDialog(
 
                     // Individual Days Toggle
                     Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         (1..7).forEach { isoDay ->
                             val isSelected = isoDay in selectedDays
+                            val dayName = GoalTrainingPlanEngine.dayNameId(isoDay)
                             Surface(
                                 color = if (isSelected) VoltLime.copy(alpha = 0.25f) else SlateSurface,
                                 shape = RoundedCornerShape(8.dp),
@@ -1490,8 +1596,13 @@ private fun DashboardAddGoalDialog(
                                     if (isSelected) VoltLime else SlateBorder
                                 ),
                                 modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 44.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
+                                    .clickable(
+                                        role = Role.Checkbox,
+                                        onClickLabel = "Pilih hari $dayName"
+                                    ) {
                                         selectedDays = if (isSelected) {
                                             if (selectedDays.size > 1) selectedDays - isoDay else selectedDays
                                         } else {
@@ -1499,13 +1610,23 @@ private fun DashboardAddGoalDialog(
                                         }
                                     }
                             ) {
-                                Text(
-                                    text = GoalTrainingPlanEngine.dayShortNameId(isoDay),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) VoltLime else TextSecondary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                                )
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = 44.dp)
+                                        .padding(vertical = 10.dp)
+                                ) {
+                                    Text(
+                                        text = GoalTrainingPlanEngine.dayShortNameId(isoDay),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) VoltLime else TextSecondary,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }

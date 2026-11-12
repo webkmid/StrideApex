@@ -26,8 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
@@ -73,6 +73,7 @@ import com.example.ui.theme.KineticCoral
 import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
+import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -240,8 +241,8 @@ fun AuthScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, SlateBorder, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(1.dp, SlateBorder, RoundedCornerShape(20.dp))
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.img_hero_runner_1794240109820),
@@ -267,13 +268,14 @@ fun AuthScreen(
                             .padding(20.dp)
                     ) {
                         Surface(
-                            color = VoltLime.copy(alpha = 0.18f),
-                            shape = CircleShape,
-                            modifier = Modifier.border(1.dp, VoltLime.copy(alpha = 0.5f), CircleShape)
+                            color = SlateSurfaceElevated,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
                         ) {
                             Text(
-                                text = "OBSIDIAN TELEMETRY LAB • v2.6",
+                                text = "StrideApex Telemetry v2.6",
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
                                 color = VoltLime,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
@@ -310,7 +312,7 @@ fun AuthScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AuthFeaturePill(icon = Icons.Default.AutoAwesome, text = "Strava AI OCR", accent = KineticCoral)
+                    AuthFeaturePill(icon = Icons.Default.DocumentScanner, text = "Strava Scanner", accent = KineticCoral)
                     AuthFeaturePill(icon = Icons.Default.Speed, text = "VDOT Race Predictor", accent = VoltLime)
                     AuthFeaturePill(icon = Icons.Default.EmojiEvents, text = "PR Vault & Push Alerts", accent = AeroCyan)
                     AuthFeaturePill(icon = Icons.AutoMirrored.Filled.DirectionsRun, text = "Kinematic Video Lab", accent = VoltLime)
@@ -357,7 +359,7 @@ fun AuthScreen(
                                 .fillMaxWidth()
                                 .height(54.dp)
                                 .testTag("google_sign_in_button"),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = VoltLime,
                                 contentColor = Color.Black
@@ -386,7 +388,7 @@ fun AuthScreen(
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .testTag("continue_offline_button"),
-                            shape = RoundedCornerShape(14.dp)
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Storage,

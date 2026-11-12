@@ -12,7 +12,7 @@ object BiomechanicsCatalog {
             focusMetricLabel = "Tibial Inclination at Contact",
             optimalTargetRange = "0° to +4° (Vertical Shin)",
             commonFault = "Overstriding with extended knee (+14° tibial angle), creating high eccentric braking impulse.",
-            biomechanicalCue = "Imagine pedaling a bicycle backward—paw the track down and back so your foot touches down directly under your hips.",
+            biomechanicalCue = "Imagine pedaling a bicycle backward: paw the track down and back so your foot touches down directly under your hips.",
             drills = listOf(
                 "2 x 30m Barefoot Grass Cadence Paws",
                 "3 x 40m A-Skip to Running Transition",
@@ -28,9 +28,9 @@ object BiomechanicsCatalog {
             title = "180+ SPM Cadence & Achilles Recoil",
             subtitle = "Shorten ground contact time (<210ms) to harness free elastic energy from the Achilles tendon.",
             focusMetricLabel = "Ground Contact Time (GCT)",
-            optimalTargetRange = "175ms – 205ms @ 180-188 SPM",
+            optimalTargetRange = "175ms - 205ms @ 180-188 SPM",
             commonFault = "Low cadence (<166 SPM) with bounding vertical oscillation (>10.5 cm) and energy dissipation.",
-            biomechanicalCue = "Run on hot coals—focus on rapid, light ankle stiffness and instant heel lift right after mid-stance.",
+            biomechanicalCue = "Run on hot coals: focus on rapid, light ankle stiffness and instant heel lift right after mid-stance.",
             drills = listOf(
                 "3 x 60s In-Place Ankling Hops (Stiff Ankle)",
                 "4 x 100m +5% Cadence Metronome Pickups",
@@ -66,7 +66,7 @@ object BiomechanicsCatalog {
             focusMetricLabel = "Peak Hip Extension Angle",
             optimalTargetRange = "18° to 24° Behind Vertical",
             commonFault = "Anterior pelvic tilt (arched lower back), cutting off trailing-leg hip extension and overloading hip flexors.",
-            biomechanicalCue = "Level your belt buckle like a bowl of water—squeeze your glute at toe-off to drive the ground behind you.",
+            biomechanicalCue = "Level your belt buckle like a bowl of water, squeeze your glute at toe-off to drive the ground behind you.",
             drills = listOf(
                 "2 x 15 Glute Bridge Marching Holds",
                 "3 x 40m High-Knee B-Skips with Hip Lock",
@@ -82,9 +82,9 @@ object BiomechanicsCatalog {
             title = "Compact Arm Swing & Counter-Rotation",
             subtitle = "Balance lower-body angular momentum with compact 85° elbow drive back toward the hip pocket.",
             focusMetricLabel = "Elbow Flexion & Drive Arc",
-            optimalTargetRange = "80°–90° Flexion (Zero Midline Cross)",
+            optimalTargetRange = "80°-90° Flexion (Zero Midline Cross)",
             commonFault = "Arms crossing the sternum midline, inducing torso torque and lateral side-to-side energy waste.",
-            biomechanicalCue = "Brush your thumbs lightly past your hip pockets on the backswing—hands relaxed as if holding a potato chip without crushing it.",
+            biomechanicalCue = "Brush your thumbs lightly past your hip pockets on the backswing, hands relaxed as if holding a potato chip without crushing it.",
             drills = listOf(
                 "3 x 45s Seated Rapid Arm-Drive Drill",
                 "4 x 80m Relaxed-Jaw & Dropped-Shoulder Strides",

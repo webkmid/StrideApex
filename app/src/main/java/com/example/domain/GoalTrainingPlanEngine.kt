@@ -224,7 +224,7 @@ object GoalTrainingPlanEngine {
      *
      * The session TYPE for each date is NOT fixed per weekday. It is decided by:
      * 1. [aiOverrides] from Gemini (if available for that date), otherwise
-     * 2. [AdaptiveTrainingAi] — an on-device adaptive model that reads the uploaded
+     * 2. [AdaptiveTrainingAi]: an on-device adaptive model that reads the uploaded
      *    workout history (fatigue, training load, last hard session, long run, taper).
      *
      * Status per session:
@@ -380,10 +380,22 @@ object GoalTrainingPlanEngine {
         cleanGoalTitle: String
     ): Prescription {
         val taperFactor = if (daysToRace in 1..7) 0.7 else 1.0
+
+        // 1. Long Run adalah sesi terpanjang dalam satu minggu program latihan
+        val longRunBase = (avgSessionKm * 1.35 * taperFactor).coerceIn(
+            when (category) {
+                DistanceCategory.FIVE_K -> 6.0..10.0
+                DistanceCategory.TEN_K -> 10.0..16.0
+                DistanceCategory.HALF_MARATHON -> 14.0..22.0
+                DistanceCategory.MARATHON -> 22.0..32.0
+            }
+        )
+
         return when (wType) {
             SessionWorkoutType.INTERVAL -> {
                 val p = (basePaceSec * 0.93).roundToLong().coerceAtLeast(150L)
-                val d = (avgSessionKm * 0.8 * taperFactor).coerceIn(3.0, 10.0)
+                val maxInterval = (longRunBase * 0.65).coerceAtLeast(3.0)
+                val d = (avgSessionKm * 0.75 * taperFactor).coerceIn(3.0, maxInterval)
                 val reps = when (category) {
                     DistanceCategory.FIVE_K -> "6x400m"
                     DistanceCategory.TEN_K -> "5x800m"
@@ -399,7 +411,15 @@ object GoalTrainingPlanEngine {
             }
             SessionWorkoutType.TEMPO -> {
                 val p = basePaceSec.coerceAtLeast(160L)
-                val d = (avgSessionKm * 0.95 * taperFactor).coerceIn(3.0, 14.0)
+                // Fisiologis lari: Tempo Run (Threshold) TIDAK BOLEH lebih jauh dari Long Run!
+                // Maksimal 65% dari Long Run dan dibatasi sesuai kategori lomba
+                val maxTempo = (longRunBase * 0.65).coerceIn(3.0, when (category) {
+                    DistanceCategory.FIVE_K -> 5.0
+                    DistanceCategory.TEN_K -> 8.0
+                    DistanceCategory.HALF_MARATHON -> 12.0
+                    DistanceCategory.MARATHON -> 16.0
+                })
+                val d = (avgSessionKm * 0.80 * taperFactor).coerceIn(3.0, maxTempo)
                 Prescription(
                     distKm = d,
                     paceSec = p,
@@ -409,17 +429,18 @@ object GoalTrainingPlanEngine {
             }
             SessionWorkoutType.RECOVERY -> {
                 val p = (basePaceSec * 1.18).roundToLong()
-                val d = (avgSessionKm * 0.65 * taperFactor).coerceIn(3.0, 8.0)
+                val maxRecovery = (longRunBase * 0.55).coerceAtLeast(3.0)
+                val d = (avgSessionKm * 0.55 * taperFactor).coerceIn(3.0, maxRecovery)
                 Prescription(
                     distKm = d,
                     paceSec = p,
                     title = "Recovery / Easy Run (${"%.1f".format(d)} km)",
-                    desc = "Lari ringan Zona 1-2 pada pace santai ${RacePredictionEngine.formatPace(p)} — harus bisa sambil mengobrol."
+                    desc = "Lari ringan Zona 1-2 pada pace santai ${RacePredictionEngine.formatPace(p)}, harus bisa sambil mengobrol."
                 )
             }
             SessionWorkoutType.EASY_LONG -> {
                 val p = (basePaceSec * 1.12).roundToLong()
-                val d = (avgSessionKm * 1.25 * taperFactor).coerceIn(5.0, (category.kilometers * 1.1).coerceAtLeast(6.0))
+                val d = longRunBase
                 Prescription(
                     distKm = d,
                     paceSec = p,

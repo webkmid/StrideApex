@@ -783,7 +783,7 @@ class StrideApexViewModel(
 
                 val prompt = buildString {
                     append("Anda adalah Pelatih Lari Maraton Profesional bersertifikasi IAFF (AI Running Coach). ")
-                    append("Atlet memiliki target: '${meta.cleanTitle}' (${category.displayName}) dengan target waktu $targetDuration (Pace $targetPace/km). ")
+                    append("Anda memiliki target: '${meta.cleanTitle}' (${category.displayName}) dengan target waktu $targetDuration (Pace $targetPace). ")
                     append("Periode latihan: ${meta.startDateDisplay} s/d hari perlombaan ${meta.targetDateDisplay} (Sisa ${meta.daysRemaining} hari). ")
                     append("Frekuensi latihan mingguan: ${meta.trainingDaysIso.size}x per minggu pada hari: ")
                     append(meta.trainingDaysIso.joinToString(", ") { GoalTrainingPlanEngine.dayNameId(it) })
@@ -791,7 +791,7 @@ class StrideApexViewModel(
                     if (workouts.isNotEmpty()) {
                         append("Riwayat latihan aktual atlet (${workouts.size} sesi tercatat di Strava): ")
                         workouts.take(4).forEach { w ->
-                            append("- ${w.title}: ${"%.2f".format(w.distanceKm)} km, Pace ${RacePredictionEngine.formatPace(w.avgPaceSecondsPerKm)}/km, HR ${w.avgHeartRate} bpm. ")
+                            append("- ${w.title}: ${"%.2f".format(w.distanceKm)} km, Pace ${RacePredictionEngine.formatPace(w.avgPaceSecondsPerKm)}, HR ${w.avgHeartRate} bpm. ")
                         }
                     } else {
                         append("Belum ada riwayat lari yang di-upload sebelumnya. Mulai dari pembangunan aerobik dasar.")

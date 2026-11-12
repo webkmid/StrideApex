@@ -155,11 +155,11 @@ fun RacePredictorAndPrScreen(
                         val record = prs.firstOrNull { it.distanceCategory == category.key }
                         Surface(
                             color = ObsidianBackground,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .border(1.dp, SlateBorder, RoundedCornerShape(14.dp))
+                                .border(1.dp, SlateBorder, RoundedCornerShape(12.dp))
                         ) {
                             Row(
                                 modifier = Modifier
@@ -223,7 +223,7 @@ fun RacePredictorAndPrScreen(
                                         if (onDeletePr != null) {
                                             IconButton(
                                                 onClick = { onDeletePr(category.key) },
-                                                modifier = Modifier.size(36.dp).padding(start = 6.dp)
+                                                modifier = Modifier.size(44.dp).padding(start = 4.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.DeleteOutline,
@@ -281,7 +281,7 @@ fun RacePredictorAndPrScreen(
                         if (predictions.isNotEmpty()) {
                             Surface(
                                 color = VoltLime.copy(alpha = 0.16f),
-                                shape = CircleShape,
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.clickable { showVdotDialog = true }
                             ) {
                                 Row(
@@ -292,6 +292,7 @@ fun RacePredictorAndPrScreen(
                                     Text(
                                         text = "VDOT ${"%.1f".format(vdot)}",
                                         style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
                                         color = VoltLime
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -318,11 +319,11 @@ fun RacePredictorAndPrScreen(
                         predictions.forEach { pred ->
                             Surface(
                                 color = ObsidianBackground,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
-                                    .border(1.dp, SlateBorder, RoundedCornerShape(14.dp))
+                                    .border(1.dp, SlateBorder, RoundedCornerShape(12.dp))
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -336,8 +337,8 @@ fun RacePredictorAndPrScreen(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Surface(
-                                            color = VoltLime.copy(alpha = 0.2f),
-                                            shape = RoundedCornerShape(6.dp)
+                                            color = VoltLime.copy(alpha = 0.18f),
+                                            shape = RoundedCornerShape(8.dp)
                                         ) {
                                             Text(
                                                 text = pred.category.shortLabel,

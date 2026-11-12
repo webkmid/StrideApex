@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.AddAPhoto
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -78,6 +79,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -254,6 +257,30 @@ fun GoalTrainingScheduleScreen(
         unfocusedTextColor = Color.White
     )
 
+    val context = LocalContext.current
+    val showDatePickerDialog = { initialKey: String, onDateSelected: (String) -> Unit ->
+        val cal = Calendar.getInstance()
+        try {
+            val parts = initialKey.split("-")
+            if (parts.size == 3) {
+                cal.set(Calendar.YEAR, parts[0].toInt())
+                cal.set(Calendar.MONTH, parts[1].toInt() - 1)
+                cal.set(Calendar.DAY_OF_MONTH, parts[2].toInt())
+            }
+        } catch (_: Exception) {}
+
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                onDateSelected(formatted)
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -295,7 +322,6 @@ fun GoalTrainingScheduleScreen(
                         Text(
                             text = "${selectedCategory.shortLabel} • Target ${targetMinsText}m ${targetSecsText}s • H-$daysRemaining",
                             style = MaterialTheme.typography.labelSmall,
-                            fontFamily = TelemetryMonoFontFamily,
                             color = AeroCyan,
                             maxLines = 1
                         )
@@ -333,7 +359,10 @@ fun GoalTrainingScheduleScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { isSettingsExpanded = !isSettingsExpanded },
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = if (isSettingsExpanded) "Tutup Pengaturan Tanggal" else "Buka Pengaturan Tanggal"
+                                ) { isSettingsExpanded = !isSettingsExpanded },
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -368,7 +397,8 @@ fun GoalTrainingScheduleScreen(
                                 OutlinedTextField(
                                     value = cleanTitle,
                                     onValueChange = { cleanTitle = it },
-                                    label = { Text("Nama Target (contoh: Astra Run 10K)") },
+                                    label = { Text("Nama Target") },
+                                    placeholder = { Text("Contoh: Astra Run 10K") },
                                     colors = fieldColors,
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
@@ -409,126 +439,144 @@ fun GoalTrainingScheduleScreen(
                                     }
                                 }
 
-                                // START DATE (Default: sysdate / hari ini)
+                                // START DATE (Default: sysdate / hari ini) with Date Picker
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = "Tanggal Mulai Latihan (Default: Hari Ini / Sysdate):",
+                                        text = "Tanggal Mulai",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary
                                     )
-                                    OutlinedTextField(
-                                        value = startDateKey,
-                                        onValueChange = { startDateKey = it },
-                                        label = { Text("Tanggal Mulai (YYYY-MM-DD)") },
-                                        colors = fieldColors,
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        FilterChip(
-                                            selected = startDateKey == todayKey,
-                                            onClick = { startDateKey = todayKey },
-                                            label = { Text("Hari Ini ($todayKey)", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = VoltLime.copy(alpha = 0.25f),
-                                                selectedLabelColor = VoltLime
-                                            )
-                                        )
+                                    Surface(
+                                        color = ObsidianBackground,
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable(
+                                                role = Role.Button,
+                                                onClickLabel = "Pilih Tanggal Mulai Latihan"
+                                            ) {
+                                                showDatePickerDialog(startDateKey) { startDateKey = it }
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = "TANGGAL MULAI",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSecondary,
+                                                    fontSize = 10.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = GoalTrainingPlanEngine.formatShortDate(startDateKey),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                            }
+                                            Surface(
+                                                color = VoltLime.copy(alpha = 0.2f),
+                                                shape = CircleShape,
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.CalendarMonth,
+                                                        contentDescription = "Pilih Tanggal Mulai",
+                                                        tint = VoltLime,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
-                                // TARGET DATE (Hari Target Lomba)
+                                // TARGET DATE (Hari Target Lomba) with Date Picker
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = "Tanggal Target Lomba / Event (Sampai Hari H):",
+                                        text = "Tanggal Target",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary
                                     )
-                                    OutlinedTextField(
-                                        value = targetDateKey,
-                                        onValueChange = { targetDateKey = it },
-                                        label = { Text("Tanggal Target Lomba (YYYY-MM-DD)") },
-                                        colors = fieldColors,
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        val date29Str = remember {
-                                            val cal = Calendar.getInstance()
-                                            if (cal.get(Calendar.DAY_OF_MONTH) > 29) {
-                                                cal.add(Calendar.MONTH, 1)
+                                    Surface(
+                                        color = ObsidianBackground,
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable(
+                                                role = Role.Button,
+                                                onClickLabel = "Pilih Tanggal Target Lomba"
+                                            ) {
+                                                showDatePickerDialog(targetDateKey) { targetDateKey = it }
                                             }
-                                            cal.set(Calendar.DAY_OF_MONTH, 29)
-                                            GoalTrainingPlanEngine.formatDateKey(cal.time)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = "TANGGAL TARGET",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSecondary,
+                                                    fontSize = 10.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = GoalTrainingPlanEngine.formatShortDate(targetDateKey),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                            }
+                                            Surface(
+                                                color = AeroCyan.copy(alpha = 0.2f),
+                                                shape = CircleShape,
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.CalendarMonth,
+                                                        contentDescription = "Pilih Tanggal Target",
+                                                        tint = AeroCyan,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
                                         }
-                                        FilterChip(
-                                            selected = targetDateKey == date29Str,
-                                            onClick = { targetDateKey = date29Str },
-                                            label = { Text("Tgl 29 ($date29Str)", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = VoltLime.copy(alpha = 0.25f),
-                                                selectedLabelColor = VoltLime
-                                            )
-                                        )
-                                        FilterChip(
-                                            selected = targetDateKey == GoalTrainingPlanEngine.addDaysToKey(startDateKey, 21),
-                                            onClick = { targetDateKey = GoalTrainingPlanEngine.addDaysToKey(startDateKey, 21) },
-                                            label = { Text("+3 Minggu", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                                selectedLabelColor = AeroCyan
-                                            )
-                                        )
-                                        FilterChip(
-                                            selected = targetDateKey == GoalTrainingPlanEngine.addDaysToKey(startDateKey, 42),
-                                            onClick = { targetDateKey = GoalTrainingPlanEngine.addDaysToKey(startDateKey, 42) },
-                                            label = { Text("+6 Minggu", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                                selectedLabelColor = AeroCyan
-                                            )
-                                        )
                                     }
                                 }
 
                                 // Frekuensi & Hari Latihan per Minggu
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = "Frekuensi Latihan per Minggu (${selectedDays.size}x/minggu):",
+                                        text = "Hari Latihan (${selectedDays.size}x/minggu):",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary
                                     )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        FilterChip(
-                                            selected = selectedDays == listOf(2, 4, 7),
-                                            onClick = { selectedDays = listOf(2, 4, 7) },
-                                            label = { Text("3x: Sel, Kam, Min (Rekomendasi)", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = VoltLime.copy(alpha = 0.25f),
-                                                selectedLabelColor = VoltLime
-                                            )
-                                        )
-                                        FilterChip(
-                                            selected = selectedDays == listOf(2, 4, 6, 7),
-                                            onClick = { selectedDays = listOf(2, 4, 6, 7) },
-                                            label = { Text("4x: Sel, Kam, Sab, Min", style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                                selectedLabelColor = AeroCyan
-                                            )
-                                        )
-                                    }
 
                                     // Toggle Hari Individu
                                     Row(
-                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         (1..7).forEach { isoDay ->
                                             val isSelected = isoDay in selectedDays
+                                            val dayName = GoalTrainingPlanEngine.dayNameId(isoDay)
                                             Surface(
                                                 color = if (isSelected) VoltLime.copy(alpha = 0.25f) else SlateSurfaceElevated,
                                                 shape = RoundedCornerShape(8.dp),
@@ -537,8 +585,13 @@ fun GoalTrainingScheduleScreen(
                                                     if (isSelected) VoltLime else SlateBorder
                                                 ),
                                                 modifier = Modifier
+                                                    .weight(1f)
+                                                    .defaultMinSize(minHeight = 44.dp)
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .clickable {
+                                                    .clickable(
+                                                        role = Role.Checkbox,
+                                                        onClickLabel = "Pilih hari $dayName"
+                                                    ) {
                                                         selectedDays = if (isSelected) {
                                                             if (selectedDays.size > 1) selectedDays - isoDay else selectedDays
                                                         } else {
@@ -546,13 +599,23 @@ fun GoalTrainingScheduleScreen(
                                                         }
                                                     }
                                             ) {
-                                                Text(
-                                                    text = GoalTrainingPlanEngine.dayShortNameId(isoDay),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (isSelected) VoltLime else TextSecondary,
-                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                                )
+                                                Box(
+                                                    contentAlignment = Alignment.Center,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .defaultMinSize(minHeight = 44.dp)
+                                                        .padding(vertical = 10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = GoalTrainingPlanEngine.dayShortNameId(isoDay),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (isSelected) VoltLime else TextSecondary,
+                                                        textAlign = TextAlign.Center,
+                                                        maxLines = 1
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -617,11 +680,11 @@ fun GoalTrainingScheduleScreen(
                 }
             }
 
-            // 2. AI Periodization Summary Card
+            // 2. Periodization Summary Card
             item {
                 Surface(
                     color = SlateSurfaceElevated,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(16.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -633,7 +696,7 @@ fun GoalTrainingScheduleScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
+                                    imageVector = Icons.Default.Insights,
                                     contentDescription = null,
                                     tint = VoltLime,
                                     modifier = Modifier.size(20.dp)
@@ -641,7 +704,7 @@ fun GoalTrainingScheduleScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "AI ADAPTIVE PERIODIZATION",
+                                        text = "PERIODISASI ADAPTIF",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = VoltLime
@@ -657,15 +720,16 @@ fun GoalTrainingScheduleScreen(
                                 OutlinedButton(
                                     onClick = { onAskGeminiAdvice(previewGoal) },
                                     enabled = !isGeminiLoading,
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
                                     if (isGeminiLoading) {
                                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AeroCyan)
                                     } else {
                                         Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = AeroCyan, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("AI Coach", style = MaterialTheme.typography.labelSmall, color = AeroCyan)
+                                        Text("Saran Sesi", style = MaterialTheme.typography.labelSmall, color = AeroCyan)
                                     }
                                 }
                             }
@@ -729,20 +793,29 @@ fun GoalTrainingScheduleScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LegendItem(icon = Icons.Default.Bolt, label = "Interval", color = VoltLime)
-                            LegendItem(icon = Icons.Default.LocalFireDepartment, label = "Tempo", color = AeroCyan)
-                            LegendItem(icon = Icons.Default.Spa, label = "Recovery", color = SuccessGreen)
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                LegendItem(icon = Icons.Default.Bolt, label = "Interval", color = VoltLime)
+                            }
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                LegendItem(icon = Icons.Default.LocalFireDepartment, label = "Tempo", color = AeroCyan)
+                            }
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                LegendItem(icon = Icons.Default.Spa, label = "Recovery", color = SuccessGreen)
+                            }
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LegendItem(icon = Icons.AutoMirrored.Filled.DirectionsRun, label = "Long Run", color = Color(0xFFFFA726))
-                            LegendItem(icon = Icons.Default.EmojiEvents, label = "Race Day", color = KineticCoral)
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                LegendItem(icon = Icons.AutoMirrored.Filled.DirectionsRun, label = "Long Run", color = Color(0xFFFFA726))
+                            }
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                LegendItem(icon = Icons.Default.EmojiEvents, label = "Race Day", color = KineticCoral)
+                            }
+                            Box(modifier = Modifier.weight(1f)) {}
                         }
                     }
                 }
@@ -835,7 +908,7 @@ private fun MonthCalendarGridCard(
                 }
                 Surface(
                     color = VoltLime.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         text = "$monthSessionsCount Sesi Lari",
@@ -942,7 +1015,10 @@ private fun CalendarDayCell(
                     color = if (isSelected) VoltLime else if (isToday) VoltLime.copy(alpha = 0.5f) else Color.Transparent,
                     shape = RoundedCornerShape(8.dp)
                 )
-                .clickable { onClick() },
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Pilih tanggal $dayNumber"
+                ) { onClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -999,7 +1075,10 @@ private fun CalendarDayCell(
                     color = if (isSelected) Color.White else if (isToday) VoltLime else iconColor.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(10.dp)
                 )
-                .clickable { onClick() }
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Pilih sesi latihan tanggal $dayNumber, ${session.sessionTitle}"
+                ) { onClick() }
                 .padding(2.dp)
         ) {
             // Day Number (Top Left)
@@ -1169,7 +1248,7 @@ private fun SessionDetailHighlightCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${RacePredictionEngine.formatPace(session.targetPaceSecondsPerKm)}/km",
+                        text = RacePredictionEngine.formatPace(session.targetPaceSecondsPerKm),
                         style = MaterialTheme.typography.titleMedium,
                         fontFamily = TelemetryMonoFontFamily,
                         fontWeight = FontWeight.Bold,
@@ -1220,7 +1299,7 @@ private fun SessionDetailHighlightCard(
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AutoAwesome,
+                            imageVector = Icons.Default.Insights,
                             contentDescription = null,
                             tint = VoltLime,
                             modifier = Modifier.size(16.dp)
@@ -1228,7 +1307,7 @@ private fun SessionDetailHighlightCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "ALASAN PENENTUAN SESI OLEH AI:",
+                                text = "ALASAN PENENTUAN SESI:",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = VoltLime
@@ -1492,7 +1571,7 @@ private fun SessionQuickInfoDialog(
                             Text(text = "PACE", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "${RacePredictionEngine.formatPace(session.targetPaceSecondsPerKm)}/km",
+                                text = RacePredictionEngine.formatPace(session.targetPaceSecondsPerKm),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = TelemetryMonoFontFamily,
                                 fontWeight = FontWeight.Bold,
@@ -1540,7 +1619,7 @@ private fun SessionQuickInfoDialog(
                             modifier = Modifier.padding(8.dp),
                             verticalAlignment = Alignment.Top
                         ) {
-                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = VoltLime, modifier = Modifier.size(15.dp))
+                            Icon(imageVector = Icons.Default.Insights, contentDescription = null, tint = VoltLime, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = session.aiReason,
@@ -1568,7 +1647,7 @@ private fun SessionQuickInfoDialog(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "${"%.2f".format(session.matchedWorkout.distanceKm)} km • ${session.matchedWorkout.title} pada pace ${RacePredictionEngine.formatPace(session.matchedWorkout.avgPaceSecondsPerKm)}/km",
+                                text = "${"%.2f".format(session.matchedWorkout.distanceKm)} km • ${session.matchedWorkout.title} pada pace ${RacePredictionEngine.formatPace(session.matchedWorkout.avgPaceSecondsPerKm)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White
                             )

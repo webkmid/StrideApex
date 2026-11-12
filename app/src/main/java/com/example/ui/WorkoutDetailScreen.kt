@@ -23,12 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
@@ -149,17 +149,49 @@ fun WorkoutDetailScreen(
     }
     val fastestPaceSec = fastestSplit?.paceSeconds ?: avgPaceSec
 
-    // 3. Athlete's VDOT & Lactate Threshold Pace (T-Pace) via Jack Daniels / Riegel Formula
-    val predictions = remember(allWorkouts, prs, workout) {
-        val list = if (allWorkouts.isNotEmpty()) allWorkouts else listOf(workout)
-        RacePredictionEngine.computeRacePredictions(list, prs, 1.06)
+    // 3. Athlete's VDOT & Lactate Threshold Pace (T-Pace) via Jack Daniels Formula
+    val isExplicitRaceEffort = remember(workout, prs) {
+        val titleLower = workout.title.lowercase(Locale.ROOT)
+        prs.isNotEmpty() ||
+        titleLower.contains("race") ||
+        titleLower.contains("lomba") ||
+        titleLower.contains("time trial") ||
+        titleLower.contains("pb") ||
+        titleLower.contains("pr ") ||
+        titleLower.endsWith(" pr")
     }
-    val vdotScore = predictions.firstOrNull()?.vdotScore ?: 35.0
-    // 10K Equivalent Race Pace from VDOT/Riegel
-    val tenKEquivPaceSec = predictions.firstOrNull { it.category == DistanceCategory.TEN_K }?.targetPaceSecondsPerKm
-        ?: (avgPaceSec * (10.0 / safeDist).pow(0.06)).roundToLong()
-    // Jack Daniels Lactate Threshold Pace (T-Pace) is ~102.5% of 10K Race Pace (seconds/km)
-    val thresholdPaceSec = (tenKEquivPaceSec * 1.025).roundToLong().coerceIn(150L, 1200L)
+
+    val thresholdPaceSec = remember(workout, prs, allWorkouts, avgPaceSec, safeDist, isExplicitRaceEffort) {
+        if (prs.isNotEmpty()) {
+            val predictions = RacePredictionEngine.computeRacePredictions(allWorkouts.ifEmpty { listOf(workout) }, prs, 1.06)
+            val tenK = predictions.firstOrNull { it.category == DistanceCategory.TEN_K }?.targetPaceSecondsPerKm
+                ?: (avgPaceSec * (10.0 / safeDist).pow(0.06)).roundToLong()
+            (tenK * 1.025).roundToLong().coerceIn(150L, 600L)
+        } else {
+            // No explicit PRs logged: calibrate threshold based on cardiovascular effort / heart rate
+            val isHrAvailable = workout.avgHeartRate > 0L
+            val hrMax = 190.0 // Standard runner Max HR baseline
+            val hrRatio = if (isHrAvailable) (workout.avgHeartRate.toDouble() / hrMax).coerceIn(0.55, 1.0) else null
+
+            val paceToThresholdRatio = when {
+                // High cardiovascular load (>88% HRmax): near-threshold / anaerobic interval
+                hrRatio != null && hrRatio >= 0.90 -> 0.96
+                hrRatio != null && hrRatio >= 0.82 -> 1.02
+                hrRatio != null && hrRatio >= 0.75 -> 1.10
+                isExplicitRaceEffort -> 1.025
+                // Standard everyday aerobic base / easy run: Jack Daniels E-Pace is ~1.18 - 1.25x T-Pace
+                else -> 1.22
+            }
+
+            (avgPaceSec / paceToThresholdRatio).roundToLong().coerceIn(150L, 600L)
+        }
+    }
+
+    // Calibrate VDOT score from the scientifically determined Threshold Pace
+    val vdotScore = remember(thresholdPaceSec) {
+        val tenKEquivSec = (thresholdPaceSec / 1.025 * 10.0).roundToLong()
+        RacePredictionEngine.calculateVdot(10000.0, tenKEquivSec)
+    }
 
     // 4. Deterministic Time-Weighted Pace Segments from Actual Splits (NO random seeds or dummy waves)
     val paceSegments = remember(parsedSplits, avgPaceSec, safeDist, safeDur) {
@@ -273,7 +305,7 @@ fun WorkoutDetailScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "$dateFormatted • ${if (workout.sourceType == "STRAVA_OCR") "Strava AI Scan" else "Manual Log"}",
+                            text = "$dateFormatted • ${if (workout.sourceType == "STRAVA_OCR") "Strava OCR" else "Manual Log"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -441,44 +473,33 @@ fun WorkoutDetailScreen(
 
                         Surface(
                             color = ObsidianBackground,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.55f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 5.dp)
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
+                                // Baris 1: Badge Peringkat di Kiri, Waktu PR di Kanan
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
+                                    Surface(
+                                        color = badgeColor.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Surface(
-                                            color = badgeColor.copy(alpha = 0.2f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(
-                                                text = when {
-                                                    isNewPr -> "🏆 TEMBUS PR #1"
-                                                    isSecondPr -> "🥈 PR KE-2"
-                                                    else -> "🏅 PR KE-${eval.rank}"
-                                                },
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = badgeColor,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Kategori ${eval.categoryLabel}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
+                                            text = when {
+                                                isNewPr -> "🏆 TEMBUS PR #1"
+                                                isSecondPr -> "🥈 PR KE-2"
+                                                else -> "🏅 PR KE-${eval.rank}"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = badgeColor,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
 
@@ -490,6 +511,16 @@ fun WorkoutDetailScreen(
                                         color = badgeColor
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Baris 2: Nama Kategori (bebas overflow selebar kartu)
+                                Text(
+                                    text = "Kategori ${eval.categoryLabel}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -630,7 +661,7 @@ fun WorkoutDetailScreen(
         }
 
         // ==========================================
-        // 4. PACE ZONE DISTRIBUTION (Jack Daniels VDOT Formula — Total 100%)
+        // 4. PACE ZONE DISTRIBUTION (Jack Daniels VDOT Formula)
         // ==========================================
         item {
             Card(
@@ -643,37 +674,21 @@ fun WorkoutDetailScreen(
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = AeroCyan,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "PACE ZONE (FORMULA VDOT)",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Surface(
-                            color = AeroCyan.copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = "Total 100%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AeroCyan,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = AeroCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "PACE ZONE (FORMULA VDOT)",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -690,7 +705,7 @@ fun WorkoutDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(14.dp)
-                            .clip(RoundedCornerShape(7.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(ObsidianBackground)
                     ) {
                         paceZonesDistribution.filter { it.percentage > 0 }.forEach { zone ->
@@ -718,7 +733,7 @@ fun WorkoutDetailScreen(
                                 ) {
                                     Surface(
                                         color = zone.color.copy(alpha = 0.22f),
-                                        shape = RoundedCornerShape(6.dp)
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(
                                             text = "Z${zone.zoneNumber}",
@@ -894,8 +909,8 @@ fun WorkoutDetailScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = "AI Analysis",
+                                    imageVector = Icons.Default.Insights,
+                                    contentDescription = "Analisis Latihan",
                                     tint = VoltLime,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -904,7 +919,7 @@ fun WorkoutDetailScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "RESULT AI • EVALUASI MENYELURUH",
+                                text = "EVALUASI PERFORMA MENYELURUH",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = VoltLime,
                                 fontWeight = FontWeight.Bold
@@ -921,7 +936,7 @@ fun WorkoutDetailScreen(
 
                     Surface(
                         color = ObsidianBackground,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, SlateBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -949,7 +964,7 @@ private fun DetailMetricTile(
 ) {
     Surface(
         color = ObsidianBackground,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, SlateBorder),
         modifier = modifier
     ) {
@@ -1001,7 +1016,7 @@ fun StravaPaceAreaChart(
 
     Surface(
         color = ObsidianBackground,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, SlateBorder),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -1421,7 +1436,7 @@ private fun buildComprehensiveAiResult(
         appendLine(splitInsight)
         appendLine()
         appendLine("3. Distribusi Zona VDOT (${"%.1f".format(vdotScore)}) & Beban Jantung:")
-        appendLine("Berdasarkan Threshold Pace ${RacePredictionEngine.formatPace(thresholdPaceSec)}, waktu lari terdistribusi di $dominantZones (Total 100%) dengan beban kardiovaskular $hrText.")
+        appendLine("Berdasarkan Threshold Pace ${RacePredictionEngine.formatPace(thresholdPaceSec)}, waktu lari terdistribusi di $dominantZones dengan beban kardiovaskular $hrText.")
         appendLine()
         append("4. Strategi & Rekomendasi Latihan Berikutnya:\n$nextAction")
     }

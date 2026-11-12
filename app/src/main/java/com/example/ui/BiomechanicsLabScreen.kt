@@ -25,11 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.SlowMotionVideo
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -165,8 +165,8 @@ fun BiomechanicsLabScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, SlateBorder, RoundedCornerShape(22.dp)),
-            shape = RoundedCornerShape(22.dp),
+                .border(1.dp, SlateBorder, RoundedCornerShape(20.dp)),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = SlateSurface)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -413,9 +413,12 @@ fun BiomechanicsLabScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(ObsidianBackground)
-                            .clickable {
+                            .clickable(
+                                role = androidx.compose.ui.semantics.Role.Checkbox,
+                                onClickLabel = "Tandai drill selesai"
+                            ) {
                                 if (isDone) completedDrills.remove(drill) else completedDrills.add(drill)
                             }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -438,7 +441,7 @@ fun BiomechanicsLabScreen(
             }
         }
 
-        // 4. AI Biomechanics Coach Interactive Q&A
+        // 4. Biomechanics Coach Interactive Q&A
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -452,14 +455,14 @@ fun BiomechanicsLabScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                        imageVector = Icons.Default.Psychology,
                         contentDescription = null,
                         tint = VoltLime,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "AI Biomechanics Coach (Gemini 3.8 Flash)",
+                        text = "Pelatih & Analisis Biomekanika",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White
                     )
@@ -473,7 +476,7 @@ fun BiomechanicsLabScreen(
                     OutlinedTextField(
                         value = coachQuestion,
                         onValueChange = { coachQuestion = it },
-                        label = { Text("Ask about running form, cadence, or injury prevention") },
+                        label = { Text("Tanyakan form lari, kadens, atau pencegahan cedera") },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = VoltLime,
                             unfocusedBorderColor = SlateBorder,

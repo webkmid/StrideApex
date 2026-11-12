@@ -101,7 +101,7 @@ object GoalReminderNotificationHelper {
 
         val meta = GoalTrainingPlanEngine.parseGoalMetadata(goal)
         val title = "Jadwal Latihan Hari Ini (${todaySession.dayName}) • ${meta.cleanTitle}"
-        val body = "Sesi: ${todaySession.sessionTitle} — ${todaySession.sessionDescription} Jangan sampai terlewat (Skipped)!"
+        val body = "Sesi: ${todaySession.sessionTitle} (${todaySession.sessionDescription}). Jangan sampai terlewat!"
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)

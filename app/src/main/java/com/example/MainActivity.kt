@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,6 +66,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -83,7 +85,9 @@ import com.example.ui.StravaOcrScreen
 import com.example.ui.signOutUser
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
+import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.StrideApexTheme
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TextSecondary
@@ -232,28 +236,49 @@ fun MainFeatureScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = SlateSurface,
+                        containerColor = ObsidianBackground,
                         titleContentColor = Color.White
                     ),
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
-                                color = if (isOfflineMode) AeroCyan else SuccessGreen,
+                                color = SlateSurfaceElevated,
                                 shape = CircleShape,
-                                modifier = Modifier.size(10.dp)
-                            ) {}
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .border(1.dp, VoltLime.copy(alpha = 0.6f), CircleShape)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "SA",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = VoltLime
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
                                     text = stringResource(R.string.app_name),
                                     style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
-                                Text(
-                                    text = userEmail,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isOfflineMode) AeroCyan else VoltLime
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = if (isOfflineMode) AeroCyan else VoltLime,
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(6.dp)
+                                    ) {}
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = userEmail,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isOfflineMode) AeroCyan else TextSecondary,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     },
@@ -261,11 +286,12 @@ fun MainFeatureScreen(
                         if (isOfflineMode) {
                             OutlinedButton(
                                 onClick = onOpenSignIn,
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = VoltLime),
                                 modifier = Modifier
                                     .padding(end = 8.dp)
+                                    .defaultMinSize(minHeight = 44.dp)
                                     .testTag("open_sign_in_button")
                             ) {
                                 Icon(
@@ -289,12 +315,15 @@ fun MainFeatureScreen(
                                         scope = scope
                                     )
                                 },
-                                modifier = Modifier.testTag("sign_out_button")
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .testTag("sign_out_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Logout,
                                     contentDescription = "Sign Out",
-                                    tint = TextSecondary
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -305,7 +334,11 @@ fun MainFeatureScreen(
                 if (!isExpandedScreen) {
                     NavigationBar(
                         containerColor = SlateSurface,
-                        tonalElevation = 8.dp
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.border(
+                            width = 0.5.dp,
+                            color = SlateBorder.copy(alpha = 0.6f)
+                        )
                     ) {
                         StrideApexTab.entries.forEach { tab ->
                             val selected = currentTab == tab

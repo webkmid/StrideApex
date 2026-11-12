@@ -85,7 +85,7 @@ fun StravaSplitsBarChart(
 
     Surface(
         color = ObsidianBackground,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, SlateBorder),
         modifier = modifier.fillMaxWidth()
     ) {

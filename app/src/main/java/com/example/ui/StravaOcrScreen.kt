@@ -16,12 +16,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,12 +31,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,15 +71,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.domain.GoalTrainingPlanEngine
 import com.example.ui.components.StravaSplitsBarChart
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.KineticCoral
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.OnVoltLime
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.TelemetryMonoFontFamily
@@ -123,6 +132,29 @@ fun StravaOcrScreen(
     var workoutDateStr by remember {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         mutableStateOf(sdf.format(Date()))
+    }
+
+    val showDatePickerDialog = { initialKey: String, onDateSelected: (String) -> Unit ->
+        val cal = java.util.Calendar.getInstance()
+        try {
+            val parts = initialKey.split("-")
+            if (parts.size == 3) {
+                cal.set(java.util.Calendar.YEAR, parts[0].toInt())
+                cal.set(java.util.Calendar.MONTH, parts[1].toInt() - 1)
+                cal.set(java.util.Calendar.DAY_OF_MONTH, parts[2].toInt())
+            }
+        } catch (_: Exception) {}
+
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                onDateSelected(formatted)
+            },
+            cal.get(java.util.Calendar.YEAR),
+            cal.get(java.util.Calendar.MONTH),
+            cal.get(java.util.Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     // Populate fields automatically whenever Gemini AI OCR completes
@@ -326,7 +358,7 @@ fun StravaOcrScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = Icons.Default.DocumentScanner,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -413,7 +445,7 @@ fun StravaOcrScreen(
                 OutlinedTextField(
                     value = titleText,
                     onValueChange = { titleText = it },
-                    label = { Text("Judul Sesi Lari (contoh: Anlene Run)") },
+                    label = { Text("Judul Sesi Lari") },
                     singleLine = true,
                     colors = fieldColors,
                     modifier = Modifier
@@ -421,71 +453,70 @@ fun StravaOcrScreen(
                         .testTag("workout_title_input")
                 )
 
-                // Tanggal Lari Field & Quick Chips
+                // Tanggal Lari Field with Date Picker
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = workoutDateStr,
-                        onValueChange = {
-                            workoutDateStr = it
-                            workoutDateEpochMs = try {
-                                SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.trim())?.time
-                            } catch (_: Exception) {
-                                null
-                            }
-                        },
-                        label = { Text("Tanggal Sesi (YYYY-MM-DD)") },
-                        singleLine = true,
-                        colors = fieldColors,
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        text = "Tanggal Sesi",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    Surface(
+                        color = ObsidianBackground,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, SlateBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = "Pilih Tanggal Sesi Lari"
+                            ) {
+                                showDatePickerDialog(workoutDateStr) { newDate ->
+                                    workoutDateStr = newDate
+                                    workoutDateEpochMs = try {
+                                        SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(newDate)?.time
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
+                            }
                     ) {
-                        val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
-                        val yesterdayStr = remember {
-                            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-                            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-                        }
-                        FilterChip(
-                            selected = workoutDateStr == todayStr,
-                            onClick = {
-                                workoutDateStr = todayStr
-                                workoutDateEpochMs = System.currentTimeMillis()
-                            },
-                            label = { Text("Hari Ini", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = VoltLime.copy(alpha = 0.2f),
-                                selectedLabelColor = VoltLime
-                            )
-                        )
-                        FilterChip(
-                            selected = workoutDateStr == yesterdayStr,
-                            onClick = {
-                                workoutDateStr = yesterdayStr
-                                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-                                workoutDateEpochMs = cal.timeInMillis
-                            },
-                            label = { Text("Kemarin", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                selectedLabelColor = AeroCyan
-                            )
-                        )
-                        val extractedDate = (ocrState as? OcrScanUiState.Extracted)?.metrics?.detectedDateStr.orEmpty()
-                        if (extractedDate.isNotBlank() && extractedDate != todayStr && extractedDate != yesterdayStr) {
-                            FilterChip(
-                                selected = workoutDateStr == extractedDate,
-                                onClick = {
-                                    workoutDateStr = extractedDate
-                                    workoutDateEpochMs = (ocrState as? OcrScanUiState.Extracted)?.metrics?.workoutDateEpochMs
-                                },
-                                label = { Text("Scan: $extractedDate", style = MaterialTheme.typography.labelSmall) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = VoltLime.copy(alpha = 0.25f),
-                                    selectedLabelColor = VoltLime
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "TANGGAL SESI",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    fontSize = 10.sp
                                 )
-                            )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = GoalTrainingPlanEngine.formatShortDate(workoutDateStr),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Surface(
+                                color = VoltLime.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "Pilih Tanggal Sesi",
+                                        tint = VoltLime,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -593,21 +624,21 @@ fun StravaOcrScreen(
 
                 Surface(
                     color = ObsidianBackground,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, VoltLime.copy(alpha = 0.4f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = Icons.Default.Insights,
                                 contentDescription = null,
                                 tint = VoltLime,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "EVALUASI & REKOMENDASI AI",
+                                text = "EVALUASI & REKOMENDASI LATIHAN",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = VoltLime
@@ -617,7 +648,7 @@ fun StravaOcrScreen(
                         OutlinedTextField(
                             value = coachingInsightText,
                             onValueChange = { coachingInsightText = it },
-                            placeholder = { Text("Evaluasi analitik performa dan rekomendasi perbaikan lari dari AI...") },
+                            placeholder = { Text("Evaluasi analitik performa dan rekomendasi perbaikan lari...") },
                             colors = fieldColors,
                             minLines = 3,
                             modifier = Modifier.fillMaxWidth()
@@ -659,12 +690,13 @@ fun StravaOcrScreen(
                     enabled = isFormValid,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = VoltLime,
-                        contentColor = Color.Black
+                        contentColor = OnVoltLime
                     ),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(vertical = 14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .defaultMinSize(minHeight = 44.dp)
                         .testTag("save_workout_button")
                 ) {
                     Icon(

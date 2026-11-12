@@ -180,4 +180,38 @@ class GoalTrainingPlanEngineTest {
         assertEquals(SessionWorkoutType.RECOVERY, tuesdaySession?.workoutType)
         assertTrue(tuesdaySession?.aiReason.orEmpty().contains("Recovery Run"))
     }
+
+    @Test
+    fun testTempoRunDistanceIsStrictlyShorterThanLongRun() {
+        val cal = Calendar.getInstance()
+        cal.set(2026, Calendar.NOVEMBER, 1, 8, 0, 0)
+        val nowMs = cal.timeInMillis
+
+        DistanceCategory.entries.forEach { cat ->
+            val encodedTitle = GoalTrainingPlanEngine.encodeGoalTitleWithSchedule(
+                "Test Run",
+                "2026-11-29",
+                listOf(2, 4, 7), // Tuesday, Thursday, Sunday
+                "2026-11-01"
+            )
+            val goal = TrainingGoal(
+                id = "goal_test_${cat.key}",
+                title = encodedTitle,
+                targetDistanceCategory = cat.key,
+                targetTimeSeconds = 3000L,
+                weeklyMileageTargetKm = 40L
+            )
+
+            val sessions = GoalTrainingPlanEngine.generateScheduleForGoal(goal, emptyList(), nowEpochMs = nowMs)
+            val tempoSession = sessions.firstOrNull { it.workoutType == SessionWorkoutType.TEMPO }
+            val longRunSession = sessions.firstOrNull { it.workoutType == SessionWorkoutType.EASY_LONG }
+
+            if (tempoSession != null && longRunSession != null) {
+                assertTrue(
+                    "Tempo run (${tempoSession.recommendedDistanceKm} km) must be strictly shorter than Long run (${longRunSession.recommendedDistanceKm} km) for category ${cat.key}",
+                    tempoSession.recommendedDistanceKm < longRunSession.recommendedDistanceKm
+                )
+            }
+        }
+    }
 }

@@ -150,7 +150,7 @@ object AdaptiveTrainingAi {
                 decisions.add(
                     Decision(
                         type = SessionWorkoutType.RECOVERY,
-                        reason = "Adaptasi AI: Riwayat lari ${recentHardWorkout.distanceKm} km (${recentHardWorkout.title}) baru saja diselesaikan. Sesi dialihkan ke Recovery Run Zona 1-2 untuk mencegah cedera & overtraining."
+                        reason = "Adaptasi Beban: Riwayat lari ${recentHardWorkout.distanceKm} km (${recentHardWorkout.title}) baru saja diselesaikan. Sesi dialihkan ke Recovery Run Zona 1-2 untuk mencegah cedera & overtraining."
                     )
                 )
                 continue
@@ -177,7 +177,7 @@ object AdaptiveTrainingAi {
                     lastQualitySlotEpochDay = slot.epochDay
                     Decision(
                         type = SessionWorkoutType.INTERVAL,
-                        reason = "Kondisi fisik optimal setelah masa pemulihan. AI menjadwalkan Interval Speed VO2Max guna menaikkan ambang batas kecepatan puncak."
+                        reason = "Kondisi fisik optimal setelah masa pemulihan. Jadwal diarahkan ke Interval Speed VO2Max guna menaikkan ambang batas kecepatan puncak."
                     )
                 }
 
