@@ -92,6 +92,13 @@ fun ProgressScreen(
             .fillMaxSize()
             .background(ObsidianBackground)
     ) {
+        // Banner Iklan Non-Intrusif di paling atas Progress
+        AdBannerBar(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+
         // Top Header + Dedicated Shoes Shortcut
         Column(
             modifier = Modifier
@@ -509,15 +516,6 @@ private fun WeeklyProgressTabContent(
                     }
                 }
             }
-        }
-
-        // 5. Banner Iklan Non-Intrusif
-        item {
-            AdBannerBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
         }
     }
 }

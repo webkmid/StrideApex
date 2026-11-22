@@ -18,7 +18,7 @@ Proyek web pendamping **StrideApex** yang berjalan di browser dengan fitur dan s
 
 ### 1. Jalankan Backend (.NET 8)
 ```bash
-cd strideapex-api
+cd ../strideapex-api
 # Opsional: aktifkan Gemini Vision & AI Coach
 # export GEMINI_API_KEY="AIza..."
 dotnet run
@@ -27,7 +27,7 @@ Backend berjalan di `http://localhost:5180` (`GET /api/health`).
 
 ### 2. Jalankan Frontend (Next.js)
 ```bash
-cd strideapex-web
+cd ../strideapex-web
 npm install
 npm run dev
 ```

@@ -17,11 +17,3 @@ local.properties
 .env
 debug.keystore
 *-debug.log
-
-# StrideApex Web & .NET API
-strideapex-web/node_modules/
-strideapex-web/.next/
-strideapex-web/.env.local
-strideapex-api/bin/
-strideapex-api/obj/
-strideapex-api/.env

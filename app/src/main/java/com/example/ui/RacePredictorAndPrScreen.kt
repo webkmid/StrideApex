@@ -105,6 +105,11 @@ fun RacePredictorAndPrScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Banner Iklan Non-Intrusif di paling atas Prediksi
+        item {
+            AdBannerBar(modifier = Modifier.fillMaxWidth())
+        }
+
         // 1. Personal Record (PR) Vault
         item {
             Card(
@@ -384,15 +389,6 @@ fun RacePredictorAndPrScreen(
                     }
                 }
             }
-        }
-
-        // 3. Banner Iklan Non-Intrusif
-        item {
-            AdBannerBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
         }
     }
 }

@@ -250,6 +250,13 @@ fun HistoryScreen(
             .background(ObsidianBackground)
             .padding(horizontal = 16.dp)
     ) {
+        // Banner Iklan Non-Intrusif di paling atas History
+        AdBannerBar(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, bottom = 4.dp)
+        )
+
         // 1. Compact Header Row with Inline Metrics & Backup Action (Export removed)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -429,66 +436,54 @@ fun HistoryScreen(
             }
             is UiState.Success -> {
                 if (filteredWorkouts.isEmpty()) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(24.dp)
+                            Surface(
+                                color = SlateSurface,
+                                shape = CircleShape,
+                                modifier = Modifier.size(64.dp),
+                                border = BorderStroke(1.dp, SlateBorder)
                             ) {
-                                Surface(
-                                    color = SlateSurface,
-                                    shape = CircleShape,
-                                    modifier = Modifier.size(64.dp),
-                                    border = BorderStroke(1.dp, SlateBorder)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
-                                            contentDescription = null,
-                                            tint = VoltLime,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
+                                        contentDescription = null,
+                                        tint = VoltLime,
+                                        modifier = Modifier.size(32.dp)
+                                    )
                                 }
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Text(
-                                    text = if (searchQuery.isNotBlank() || selectedFilterIndex != 0) {
-                                        "Tidak ada sesi lari yang cocok"
-                                    } else {
-                                        "Belum ada riwayat lari"
-                                    },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = if (searchQuery.isNotBlank() || selectedFilterIndex != 0) {
-                                        "Coba reset kata kunci pencarian atau ubah filter kategori."
-                                    } else {
-                                        "Gunakan tombol Scan Run atau Catat Lari di Dashboard untuk mulai mencatat riwayat!"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
                             }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank() || selectedFilterIndex != 0) {
+                                    "Tidak ada sesi lari yang cocok"
+                                } else {
+                                    "Belum ada riwayat lari"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank() || selectedFilterIndex != 0) {
+                                    "Coba reset kata kunci pencarian atau ubah filter kategori."
+                                } else {
+                                    "Gunakan tombol Scan Run atau Catat Lari di Dashboard untuk mulai mencatat riwayat!"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
                         }
-
-                        AdBannerBar(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        )
                     }
                 } else {
                     LazyColumn(
@@ -506,14 +501,6 @@ fun HistoryScreen(
                                 },
                                 onEdit = { workoutToEdit = workout },
                                 onDelete = { workoutToDelete = workout }
-                            )
-                        }
-
-                        item {
-                            AdBannerBar(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp, bottom = 8.dp)
                             )
                         }
                     }

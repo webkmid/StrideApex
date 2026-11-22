@@ -289,6 +289,11 @@ fun DashboardScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Banner Iklan Non-Intrusif di paling atas Dashboard
+        item {
+            AdBannerBar(modifier = Modifier.fillMaxWidth())
+        }
+
         // 0. Banner Jadwal Latihan Hari Ini (jika ada sesi latihan hari ini)
         if (todayTrainingSessionInfo != null) {
             item {
@@ -1111,15 +1116,6 @@ fun DashboardScreen(
                             }
                         }
                     }
-                }
-
-                // Banner Iklan Non-Intrusif di bagian bawah Dashboard
-                item {
-                    AdBannerBar(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                    )
                 }
             }
         }
