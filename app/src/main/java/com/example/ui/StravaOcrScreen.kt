@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -55,6 +56,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.domain.GoalTrainingPlanEngine
+import com.example.domain.RacePredictionEngine
 import com.example.ui.components.StravaSplitsBarChart
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.KineticCoral
@@ -87,6 +90,7 @@ import com.example.ui.theme.OnVoltLime
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
 import com.example.util.getAppCheckDebugToken
@@ -95,6 +99,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToLong
 
 @Composable
 fun StravaOcrScreen(
@@ -112,6 +117,7 @@ fun StravaOcrScreen(
         sourceType: String,
         workoutDateEpochMs: Long?
     ) -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -129,6 +135,7 @@ fun StravaOcrScreen(
     var coachingInsightText by remember { mutableStateOf("") }
     var sourceType by remember { mutableStateOf("MANUAL") }
     var workoutDateEpochMs by remember { mutableStateOf<Long?>(null) }
+    var extractedAvgPaceSec by remember { mutableStateOf(0L) }
     var workoutDateStr by remember {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         mutableStateOf(sdf.format(Date()))
@@ -162,7 +169,18 @@ fun StravaOcrScreen(
         if (ocrState is OcrScanUiState.Extracted) {
             val m = ocrState.metrics
             titleText = m.title
-            distanceKmText = "%.2f".format(m.distanceKm)
+            extractedAvgPaceSec = m.avgPaceSecondsPerKm
+
+            // When no distance is on the screenshot (e.g. splits), calculate: moving time / avg pace
+            val resolvedDist = if (m.distanceKm > 0.0) {
+                m.distanceKm
+            } else if (m.durationSeconds > 0L && m.avgPaceSecondsPerKm > 0L) {
+                ((m.durationSeconds.toDouble() / m.avgPaceSecondsPerKm.toDouble()) * 100.0).roundToLong() / 100.0
+            } else {
+                0.0
+            }
+
+            distanceKmText = if (resolvedDist > 0.0) "%.2f".format(resolvedDist) else ""
             durationMinText = (m.durationSeconds / 60).toString()
             durationSecText = (m.durationSeconds % 60).toString()
             heartRateText = if (m.avgHeartRate > 0) m.avgHeartRate.toString() else ""
@@ -205,6 +223,34 @@ fun StravaOcrScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (onBack != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                TextButton(
+                    onClick = onBack,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                    modifier = Modifier.defaultMinSize(minHeight = 40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Kembali ke Dashboard",
+                        tint = VoltLime,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Kembali ke Dashboard",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = VoltLime
+                    )
+                }
+            }
+        }
+
         // 1. Screenshot Upload Card
         Card(
             modifier = Modifier
@@ -217,7 +263,7 @@ fun StravaOcrScreen(
                 Text(
                     text = "Scan Strava Screenshot",
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White
+                    color = TextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -438,8 +484,9 @@ fun StravaOcrScreen(
                     unfocusedBorderColor = SlateBorder,
                     focusedLabelColor = VoltLime,
                     unfocusedLabelColor = TextSecondary,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    cursorColor = VoltLime
                 )
 
                 OutlinedTextField(
@@ -500,7 +547,7 @@ fun StravaOcrScreen(
                                     text = GoalTrainingPlanEngine.formatShortDate(workoutDateStr),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                             }
                             Surface(
@@ -533,6 +580,15 @@ fun StravaOcrScreen(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = fieldColors,
+                        supportingText = if (extractedAvgPaceSec > 0L) {
+                            {
+                                Text(
+                                    text = "Pace: ${RacePredictionEngine.formatPace(extractedAvgPaceSec)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VoltLime
+                                )
+                            }
+                        } else null,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("workout_distance_input")

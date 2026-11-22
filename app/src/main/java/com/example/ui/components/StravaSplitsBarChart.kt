@@ -22,30 +22,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AeroCyan
+import com.example.ui.theme.KineticCoral
 import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VoltLime
 import java.util.regex.Pattern
 
 data class StravaSplitItem(
     val km: Int,
     val paceStr: String,
     val paceSeconds: Long,
-    val deltaFromAvgSeconds: Long = 0L
+    val deltaFromAvgSeconds: Long = 0L,
+    val kmLabel: String = km.toString(),
+    val distanceKm: Double = 1.0
 )
 
 fun parseSplitsSummary(splitsSummary: String, avgPaceSecondsPerKm: Long = 0L): List<StravaSplitItem> {
     if (splitsSummary.isBlank()) return emptyList()
 
     val items = mutableListOf<StravaSplitItem>()
-    // Match "KM 1: 7:28/km" or "1 7:28" or "1: 7:28"
-    val pattern = Pattern.compile("(?:KM\\s*)?([1-9][0-9]?)\\s*[:.]?\\s*([0-9]{1,2}:[0-5][0-9])(?:/km)?", Pattern.CASE_INSENSITIVE)
+    // Match "KM 1: 7:28/km", "KM 0.9: 6:45/km", "1 7:28", "0.9 6:45", or "1: 7:28"
+    val pattern = Pattern.compile("(?:KM\\s*)?(0[.,]\\d+|[1-9]\\d*(?:[.,]\\d+)?)\\s*[:.\\-]?\\s*([0-9]{1,2}:[0-5][0-9])(?:/km)?", Pattern.CASE_INSENSITIVE)
     val matcher = pattern.matcher(splitsSummary)
 
     while (matcher.find()) {
-        val kmNum = matcher.group(1)?.toIntOrNull() ?: continue
+        val rawKm = matcher.group(1)?.replace(",", ".") ?: continue
+        val kmDouble = rawKm.toDoubleOrNull() ?: continue
+        if (kmDouble <= 0.0 || kmDouble > 100.0) continue
+
         val paceStr = matcher.group(2).orEmpty()
         val parts = paceStr.split(":")
         val sec = if (parts.size == 2) {
@@ -54,7 +62,19 @@ fun parseSplitsSummary(splitsSummary: String, avgPaceSecondsPerKm: Long = 0L): L
             0L
         }
         if (sec in 120L..900L) {
-            items.add(StravaSplitItem(km = kmNum, paceStr = paceStr, paceSeconds = sec))
+            val isFractional = kmDouble < 1.0
+            val kmNum = if (isFractional) items.size + 1 else kmDouble.toInt()
+            val label = if (!isFractional && kmDouble % 1.0 == 0.0) kmNum.toString() else rawKm
+            val distKm = if (isFractional) kmDouble else 1.0
+            items.add(
+                StravaSplitItem(
+                    km = kmNum,
+                    paceStr = paceStr,
+                    paceSeconds = sec,
+                    kmLabel = label,
+                    distanceKm = distKm
+                )
+            )
         }
     }
 
@@ -108,7 +128,7 @@ fun StravaSplitsBarChart(
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "${splits.size} KM",
+                    text = "${splits.size} Split",
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = TelemetryMonoFontFamily,
                     color = TextSecondary
@@ -129,11 +149,11 @@ fun StravaSplitsBarChart(
                 ) {
                     // Split kilometer index
                     Text(
-                        text = "${split.km}",
+                        text = split.kmLabel,
                         style = MaterialTheme.typography.labelMedium,
                         fontFamily = TelemetryMonoFontFamily,
-                        color = Color.White,
-                        modifier = Modifier.width(22.dp)
+                        color = TextPrimary,
+                        modifier = Modifier.width(34.dp)
                     )
 
                     // Split pace
@@ -142,13 +162,13 @@ fun StravaSplitsBarChart(
                         style = MaterialTheme.typography.labelMedium,
                         fontFamily = TelemetryMonoFontFamily,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = TextPrimary,
                         modifier = Modifier.width(46.dp)
                     )
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Strava signature electric blue progress bar
+                    // StrideApex athletic emerald progress bar
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -160,7 +180,7 @@ fun StravaSplitsBarChart(
                                 .fillMaxWidth(barFraction)
                                 .height(14.dp)
                                 .background(
-                                    color = Color(0xFF2979FF),
+                                    color = VoltLime,
                                     shape = RoundedCornerShape(4.dp)
                                 )
                         )
@@ -178,7 +198,7 @@ fun StravaSplitsBarChart(
                     val deltaColor = when {
                         delta < 0L -> SuccessGreen
                         delta == 0L -> TextSecondary
-                        else -> Color(0xFFFF8A65)
+                        else -> KineticCoral
                     }
 
                     Text(

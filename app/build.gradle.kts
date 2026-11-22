@@ -1,5 +1,6 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 import java.time.Duration
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -21,6 +22,15 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    val envProps = Properties().apply {
+      listOf(rootProject.file(".env.example"), rootProject.file(".env"))
+        .filter { it.exists() }
+        .forEach { file -> file.inputStream().use { load(it) } }
+    }
+    manifestPlaceholders["ADMOB_APP_ID"] =
+      envProps.getProperty("ADMOB_APP_ID")?.takeIf { it.isNotBlank() }
+        ?: "ca-app-pub-3940256099942544~3347511713"
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
@@ -118,6 +128,7 @@ dependencies {
   // implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
   implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+  implementation(libs.play.services.ads)
   // Uncomment to use Firestore:
   implementation(libs.firebase.firestore)
 

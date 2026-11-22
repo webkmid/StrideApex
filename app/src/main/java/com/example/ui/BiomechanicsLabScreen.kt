@@ -76,6 +76,7 @@ import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
 import com.example.viewmodel.CoachUiState
@@ -179,7 +180,7 @@ fun BiomechanicsLabScreen(
                         Text(
                             text = activeModule.title,
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White
+                            color = TextPrimary
                         )
                         Text(
                             text = BiomechanicsCatalog.phaseLabelForProgress(gaitPhase),
@@ -253,7 +254,7 @@ fun BiomechanicsLabScreen(
                         Text(
                             text = "GAIT CYCLE ${(gaitPhase * 100).toInt()}%",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
+                            color = TextPrimary,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
@@ -391,7 +392,7 @@ fun BiomechanicsLabScreen(
                         Text(
                             text = activeModule.biomechanicalCue,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White
+                            color = TextPrimary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -464,7 +465,7 @@ fun BiomechanicsLabScreen(
                     Text(
                         text = "Pelatih & Analisis Biomekanika",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White
+                        color = TextPrimary
                     )
                 }
 
@@ -480,8 +481,9 @@ fun BiomechanicsLabScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = VoltLime,
                             unfocusedBorderColor = SlateBorder,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            cursorColor = VoltLime
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -530,7 +532,7 @@ fun BiomechanicsLabScreen(
                             Text(
                                 text = coachState.text,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White,
+                                color = TextPrimary,
                                 modifier = Modifier.padding(14.dp)
                             )
                         }
@@ -546,7 +548,7 @@ fun BiomechanicsLabScreen(
                             Text(
                                 text = coachState.text,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White,
+                                color = TextPrimary,
                                 modifier = Modifier.padding(14.dp)
                             )
                         }

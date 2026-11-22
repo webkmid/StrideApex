@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -96,6 +97,8 @@ import com.example.domain.RacePredictionEngine
 import com.example.domain.ScheduledSessionStatus
 import com.example.domain.ScheduledTrainingSession
 import com.example.domain.SessionWorkoutType
+import com.example.domain.ShoeUnlockEngine
+import com.example.domain.WeeklyProgressEngine
 import com.example.ui.components.StravaSplitsBarChart
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.KineticCoral
@@ -106,8 +109,10 @@ import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
+import com.example.util.AdBannerBar
 import com.example.util.GoalReminderNotificationHelper
 import com.example.viewmodel.UiState
 import java.text.SimpleDateFormat
@@ -125,10 +130,26 @@ fun DashboardScreen(
     onOpenSignIn: () -> Unit = {},
     onNavigateToOcr: () -> Unit,
     onNavigateToPredict: () -> Unit,
+    onNavigateToHistory: () -> Unit = {},
+    onNavigateToProgress: () -> Unit = {},
+    onNavigateToShoes: () -> Unit = {},
     onCreateCloudBackup: (String) -> Unit,
     onExportBackupJson: () -> String,
     onDeleteWorkout: (String) -> Unit,
-    onUpdateWorkout: (id: String, title: String, distanceKm: Double, durationSeconds: Long, avgHeartRate: Long, cadenceSpm: Long, elevationGainM: Long, workoutDateEpochMs: Long?) -> Unit,
+    onUpdateWorkout: (
+        id: String,
+        title: String,
+        distanceKm: Double,
+        durationSeconds: Long,
+        avgHeartRate: Long,
+        cadenceSpm: Long,
+        elevationGainM: Long,
+        splitsSummary: String,
+        aiCoachingInsight: String,
+        workoutDateEpochMs: Long?
+    ) -> Unit,
+    refreshingWorkoutId: String? = null,
+    onRefreshWorkoutAi: ((WorkoutLog) -> Unit)? = null,
     onAddGoal: (String, DistanceCategory, Long, Long, Boolean, Long, Long) -> Unit = { _, _, _, _, _, _, _ -> },
     onSaveGoalSchedule: (
         goalId: String?,
@@ -159,6 +180,11 @@ fun DashboardScreen(
     }
     val currentVdot = predictions.firstOrNull()?.vdotScore
     val activeGoal = goals.firstOrNull { !it.completed } ?: goals.firstOrNull()
+    val weeklyProgress = remember(workouts, activeGoal) {
+        WeeklyProgressEngine.computeWeeklyProgress(workouts, activeGoal)
+    }
+    val currentWeekVolumeKm = weeklyProgress.totalDistanceKm
+    val shoeProgress = remember(workouts) { ShoeUnlockEngine.evaluateProgress(workouts) }
 
     // 1. Check if today is a scheduled training day for any active goal
     val todayTrainingSessionInfo = remember(goals, workouts) {
@@ -195,15 +221,17 @@ fun DashboardScreen(
         )
     }
 
-    workoutToEdit?.let { workout ->
-        EditWorkoutDialog(
-            workout = workout,
-            onDismiss = { workoutToEdit = null },
-            onConfirm = { updatedTitle, updatedDist, updatedDur, updatedHr, updatedCad, updatedElev, dateEpochMs ->
-                onUpdateWorkout(workout.id, updatedTitle, updatedDist, updatedDur, updatedHr, updatedCad, updatedElev, dateEpochMs)
+    if (workoutToEdit != null) {
+        EditWorkoutScreen(
+            workout = workoutToEdit!!,
+            onBack = { workoutToEdit = null },
+            onSaveWorkout = { id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs ->
+                onUpdateWorkout(id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs)
                 workoutToEdit = null
-            }
+            },
+            modifier = modifier
         )
+        return
     }
 
     val selectedWorkout = workouts.firstOrNull {
@@ -221,6 +249,8 @@ fun DashboardScreen(
                 onDeleteWorkout(id)
                 selectedWorkoutKey = null
             },
+            isRefreshingAi = refreshingWorkoutId == selectedWorkout.id && selectedWorkout.id.isNotBlank(),
+            onRefreshAi = onRefreshWorkoutAi,
             modifier = modifier
         )
         return
@@ -342,7 +372,7 @@ fun DashboardScreen(
                             text = "${todayMeta.cleanTitle} • ${todaySession.sessionTitle}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -378,7 +408,7 @@ fun DashboardScreen(
                                             style = MaterialTheme.typography.titleMedium,
                                             fontFamily = TelemetryMonoFontFamily,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = TextPrimary
                                         )
                                     }
                                 }
@@ -398,32 +428,20 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { selectedGoalForScheduleScreen = todayGoal },
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.defaultMinSize(minHeight = 44.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.CalendarMonth, contentDescription = null, tint = AeroCyan, modifier = Modifier.size(15.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Jadwal", style = MaterialTheme.typography.labelSmall, color = AeroCyan, maxLines = 1)
-                                }
-                                Button(
-                                    onClick = onNavigateToOcr,
-                                    colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = Color.Black),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.defaultMinSize(minHeight = 44.dp),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AddAPhoto,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Scan", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
-                                }
+                            Button(
+                                onClick = onNavigateToOcr,
+                                colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = Color.Black),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AddAPhoto,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Scan", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -488,7 +506,7 @@ fun DashboardScreen(
                         SummaryStatBadge(
                             label = "RUNS",
                             value = "${workouts.size}",
-                            color = Color.White,
+                            color = TextPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         SummaryStatBadge(
@@ -506,47 +524,162 @@ fun DashboardScreen(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = SlateBorder)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Clickable Goal Progress Bar -> navigates directly to Goal Schedule / Creation
                     if (activeGoal != null) {
                         val activeMeta = remember(activeGoal) { GoalTrainingPlanEngine.parseGoalMetadata(activeGoal) }
-                        Spacer(modifier = Modifier.height(14.dp))
-                        HorizontalDivider(color = SlateBorder)
-                        Spacer(modifier = Modifier.height(12.dp))
+                        val progress = (currentWeekVolumeKm.toFloat() / activeGoal.weeklyMileageTargetKm.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "Buka Goals ${activeMeta.cleanTitle}"
+                                ) { selectedGoalForScheduleScreen = activeGoal }
+                                .padding(vertical = 4.dp)
+                                .testTag("hero_goal_progress_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Goals • ${activeMeta.cleanTitle}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp)
+                                )
+                                Text(
+                                    text = "${"%.1f".format(currentWeekVolumeKm)} / ${activeGoal.weeklyMileageTargetKm} km/wk →",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = TelemetryMonoFontFamily,
+                                    color = AeroCyan,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape),
+                                color = AeroCyan,
+                                trackColor = SlateBorder
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "Buat Goals Lari Baru"
+                                ) { isCreatingNewGoalScreen = true }
+                                .padding(vertical = 4.dp)
+                                .testTag("hero_goal_progress_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Goals • Belum ada target aktif",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp)
+                                )
+                                Text(
+                                    text = "+ Buat Goal →",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = TelemetryMonoFontFamily,
+                                    color = AeroCyan,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { 0f },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape),
+                                color = AeroCyan,
+                                trackColor = SlateBorder
+                            )
+                        }
+                    }
+
+                    // Shoe Unlock Progression Bar alongside Goal Progress
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 44.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(role = Role.Button) { onNavigateToShoes() }
+                            .padding(vertical = 4.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = activeMeta.cleanTitle,
+                                text = "Sepatu • ${shoeProgress.currentTier.badgeLabel}",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color.White,
+                                color = TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${"%.1f".format(totalVolumeKm)} / ${activeGoal.weeklyMileageTargetKm} km/wk",
+                                text = if (shoeProgress.nextTier != null) {
+                                    "Next ${shoeProgress.nextTier.unlockPaceDisplay.removePrefix("Pace ")} →"
+                                } else {
+                                    "MAX TIER →"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = TelemetryMonoFontFamily,
-                                color = AeroCyan,
-                                maxLines = 1
+                                color = if (shoeProgress.nextTier == null) SuccessGreen else VoltLime,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
-                        val progress = (totalVolumeKm.toFloat() / activeGoal.weeklyMileageTargetKm.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
                         LinearProgressIndicator(
-                            progress = { progress },
+                            progress = { shoeProgress.progressToNextTier.coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(CircleShape),
-                            color = AeroCyan,
+                            color = if (shoeProgress.nextTier == null) SuccessGreen else VoltLime,
                             trackColor = SlateBorder
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -591,7 +724,7 @@ fun DashboardScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("PR & Target", style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1)
+                            Text("PR & Target", style = MaterialTheme.typography.labelMedium, color = TextPrimary, maxLines = 1)
                         }
                     }
                 }
@@ -624,7 +757,7 @@ fun DashboardScreen(
                             Text(
                                 text = "TARGET LARI (${goals.size})",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
 
@@ -640,7 +773,7 @@ fun DashboardScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("+ Target", style = MaterialTheme.typography.labelMedium, color = AeroCyan)
+                            Text("Target", style = MaterialTheme.typography.labelMedium, color = AeroCyan)
                         }
                     }
 
@@ -720,7 +853,7 @@ fun DashboardScreen(
                                                     text = meta.cleanTitle,
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White,
+                                                    color = TextPrimary,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -832,7 +965,7 @@ fun DashboardScreen(
                                                     text = "Buka Kalender & Jadwal Latihan",
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = Color.White,
+                                                    color = TextPrimary,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -853,7 +986,7 @@ fun DashboardScreen(
             }
         }
 
-        // 3. Workouts Header + Quick Backup Button
+        // 3. Workouts Header + Quick Link to History
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -861,32 +994,20 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "WORKOUT HISTORY (${workouts.size})",
+                    text = "SESI LARI TERBARU",
                     style = MaterialTheme.typography.labelLarge,
-                    color = VoltLime
+                    color = VoltLime,
+                    fontWeight = FontWeight.Bold
                 )
                 if (workouts.isNotEmpty()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                val timestampLabel = SimpleDateFormat("MMM d HH:mm", Locale.US).format(Date())
-                                onCreateCloudBackup("Backup ($timestampLabel)")
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .testTag("create_backup_button")
+                    TextButton(
+                        onClick = onNavigateToHistory,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = null,
-                            tint = AeroCyan,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Backup",
+                            text = "Buka History (${workouts.size}) →",
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
                             color = AeroCyan
                         )
                     }
@@ -947,7 +1068,7 @@ fun DashboardScreen(
                                 Text(
                                     text = "Belum ada data lari",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
@@ -959,7 +1080,8 @@ fun DashboardScreen(
                         }
                     }
                 } else {
-                    items(workouts, key = { it.id.ifBlank { it.title + it.durationSeconds } }) { workout ->
+                    // Show up to 2 most recent workouts on Dashboard
+                    items(workouts.take(2), key = { it.id.ifBlank { it.title + it.durationSeconds } }) { workout ->
                         WorkoutTelemetryCard(
                             workout = workout,
                             onOpenDetail = {
@@ -969,6 +1091,35 @@ fun DashboardScreen(
                             onDelete = { if (workout.id.isNotBlank()) onDeleteWorkout(workout.id) }
                         )
                     }
+
+                    if (workouts.size > 2) {
+                        item {
+                            OutlinedButton(
+                                onClick = onNavigateToHistory,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, SlateBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 44.dp)
+                            ) {
+                                Text(
+                                    text = "Lihat Semua ${workouts.size} Sesi di Tab History →",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = VoltLime
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Banner Iklan Non-Intrusif di bagian bawah Dashboard
+                item {
+                    AdBannerBar(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
                 }
             }
         }
@@ -1084,7 +1235,7 @@ private fun WorkoutTelemetryCard(
                     Text(
                         text = workout.title,
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1134,7 +1285,7 @@ private fun WorkoutTelemetryCard(
                 TelemetryMetricItem(
                     label = "DURATION",
                     value = RacePredictionEngine.formatDuration(workout.durationSeconds),
-                    valueColor = Color.White
+                    valueColor = TextPrimary
                 )
                 TelemetryMetricItem(
                     label = "AVG PACE",
@@ -1199,186 +1350,7 @@ private fun TelemetryMetricItem(
     }
 }
 
-@Composable
-private fun EditWorkoutDialog(
-    workout: WorkoutLog,
-    onDismiss: () -> Unit,
-    onConfirm: (String, Double, Long, Long, Long, Long, Long?) -> Unit
-) {
-    var title by remember { mutableStateOf(workout.title) }
-    var distanceKmText by remember { mutableStateOf(workout.distanceKm.toString()) }
-    var minutesText by remember { mutableStateOf((workout.durationSeconds / 60).toString()) }
-    var secondsText by remember { mutableStateOf((workout.durationSeconds % 60).toString()) }
-    var hrText by remember { mutableStateOf(if (workout.avgHeartRate > 0) workout.avgHeartRate.toString() else "") }
-    var cadenceText by remember { mutableStateOf(if (workout.cadenceSpm > 0) workout.cadenceSpm.toString() else "") }
-    var elevationText by remember { mutableStateOf(if (workout.elevationGainM > 0) workout.elevationGainM.toString() else "") }
-    var dateStr by remember { mutableStateOf(GoalTrainingPlanEngine.workoutDateKey(workout)) }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = VoltLime,
-        unfocusedBorderColor = SlateBorder,
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = SlateSurfaceElevated,
-        title = {
-            Text("Edit Riwayat Lari", color = Color.White, style = MaterialTheme.typography.titleLarge)
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Nama Sesi Lari") },
-                    colors = fieldColors,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Workout Date Field & Quick Chips
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = dateStr,
-                        onValueChange = { dateStr = it },
-                        label = { Text("Tanggal Sesi (YYYY-MM-DD)") },
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
-                        val yesterdayStr = remember {
-                            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-                            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-                        }
-                        FilterChip(
-                            selected = dateStr == todayStr,
-                            onClick = { dateStr = todayStr },
-                            label = { Text("Hari Ini", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = VoltLime.copy(alpha = 0.2f),
-                                selectedLabelColor = VoltLime
-                            )
-                        )
-                        FilterChip(
-                            selected = dateStr == yesterdayStr,
-                            onClick = { dateStr = yesterdayStr },
-                            label = { Text("Kemarin", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AeroCyan.copy(alpha = 0.2f),
-                                selectedLabelColor = AeroCyan
-                            )
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = distanceKmText,
-                    onValueChange = { distanceKmText = it },
-                    label = { Text("Jarak (km)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    colors = fieldColors,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = minutesText,
-                        onValueChange = { minutesText = it },
-                        label = { Text("Menit") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = secondsText,
-                        onValueChange = { secondsText = it },
-                        label = { Text("Detik") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = hrText,
-                        onValueChange = { hrText = it },
-                        label = { Text("Avg HR (bpm)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = cadenceText,
-                        onValueChange = { cadenceText = it },
-                        label = { Text("Cadence (spm)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = fieldColors,
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                OutlinedTextField(
-                    value = elevationText,
-                    onValueChange = { elevationText = it },
-                    label = { Text("Elevation Gain (m)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = fieldColors,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val dist = distanceKmText.replace(',', '.').toDoubleOrNull()?.coerceIn(0.1, 500.0) ?: workout.distanceKm
-                    val mins = minutesText.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
-                    val secs = secondsText.toLongOrNull()?.coerceIn(0L, 59L) ?: 0L
-                    val totalSecs = (mins * 60L + secs).coerceAtLeast(1L)
-                    val hr = hrText.toLongOrNull()?.coerceIn(0L, 260L) ?: 0L
-                    val cad = cadenceText.toLongOrNull()?.coerceIn(0L, 300L) ?: 0L
-                    val elev = elevationText.toLongOrNull()?.coerceIn(0L, 20000L) ?: 0L
-                    val parsedDateEpoch = try {
-                        SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr.trim())?.time
-                    } catch (_: Exception) {
-                        workout.createdAt?.toDate()?.time
-                    }
-
-                    onConfirm(
-                        title.ifBlank { "Training Run" },
-                        dist,
-                        totalSecs,
-                        hr,
-                        cad,
-                        elev,
-                        parsedDateEpoch
-                    )
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = Color.Black)
-            ) {
-                Text("Simpan")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Batal", color = TextSecondary)
-            }
-        }
-    )
-}
 
 @Composable
 private fun DashboardAddGoalDialog(
@@ -1424,8 +1396,8 @@ private fun DashboardAddGoalDialog(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = VoltLime,
         unfocusedBorderColor = SlateBorder,
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary
     )
 
     val isValid = (targetMinsText.toLongOrNull() ?: 0L) > 0L && selectedDays.isNotEmpty()
@@ -1434,7 +1406,7 @@ private fun DashboardAddGoalDialog(
         onDismissRequest = onDismiss,
         containerColor = SlateSurfaceElevated,
         title = {
-            Text("Buat Target Lari & Jadwal Baru", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            Text("Buat Target Lari & Jadwal Baru", color = TextPrimary, style = MaterialTheme.typography.titleLarge)
         },
         text = {
             Column(
@@ -1528,7 +1500,7 @@ private fun DashboardAddGoalDialog(
                                     text = GoalTrainingPlanEngine.formatShortDate(targetDateKey),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                             }
                             Surface(
@@ -1652,9 +1624,9 @@ private fun DashboardAddGoalDialog(
                                         SessionWorkoutType.INTERVAL -> VoltLime
                                         SessionWorkoutType.TEMPO -> AeroCyan
                                         SessionWorkoutType.RECOVERY -> SuccessGreen
-                                        SessionWorkoutType.EASY_LONG -> Color.White
+                                        SessionWorkoutType.EASY_LONG -> TextPrimary
                                         SessionWorkoutType.RACE_DAY -> KineticCoral
-                                        else -> Color.White
+                                        else -> TextPrimary
                                     }
                                 )
                             }

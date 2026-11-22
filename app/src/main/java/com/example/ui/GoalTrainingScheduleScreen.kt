@@ -99,13 +99,16 @@ import com.example.domain.SessionWorkoutType
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.KineticCoral
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.OnVoltLime
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
+import com.example.ui.theme.WarningAmber
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -149,7 +152,7 @@ fun GoalTrainingScheduleScreen(
             GoalTrainingPlanEngine.parseGoalMetadata(goal)
         } else {
             GoalScheduleMetadata(
-                cleanTitle = "Astra Run 10K",
+                cleanTitle = "",
                 startDateKey = todayKey,
                 startDateDisplay = GoalTrainingPlanEngine.formatShortDate(todayKey),
                 targetDateKey = GoalTrainingPlanEngine.defaultTargetDateKey(21),
@@ -253,8 +256,9 @@ fun GoalTrainingScheduleScreen(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = VoltLime,
         unfocusedBorderColor = SlateBorder,
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = VoltLime
     )
 
     val context = LocalContext.current
@@ -306,7 +310,7 @@ fun GoalTrainingScheduleScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Kembali ke Dashboard",
-                            tint = Color.White
+                            tint = TextPrimary
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
@@ -315,7 +319,7 @@ fun GoalTrainingScheduleScreen(
                             text = cleanTitle.ifBlank { "Jadwal Target Lari" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -398,7 +402,7 @@ fun GoalTrainingScheduleScreen(
                                     value = cleanTitle,
                                     onValueChange = { cleanTitle = it },
                                     label = { Text("Nama Target") },
-                                    placeholder = { Text("Contoh: Astra Run 10K") },
+                                    placeholder = { Text("Contoh: Target Lari 10K") },
                                     colors = fieldColors,
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
@@ -479,7 +483,7 @@ fun GoalTrainingScheduleScreen(
                                                     text = GoalTrainingPlanEngine.formatShortDate(startDateKey),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = TextPrimary
                                                 )
                                             }
                                             Surface(
@@ -540,7 +544,7 @@ fun GoalTrainingScheduleScreen(
                                                     text = GoalTrainingPlanEngine.formatShortDate(targetDateKey),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = TextPrimary
                                                 )
                                             }
                                             Surface(
@@ -746,7 +750,7 @@ fun GoalTrainingScheduleScreen(
                                 Text(
                                     text = geminiAdviceText,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     modifier = Modifier.padding(12.dp)
                                 )
                             }
@@ -759,7 +763,7 @@ fun GoalTrainingScheduleScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            MiniStatPill(label = "TOTAL SESI", value = "${sessions.size}", color = Color.White)
+                            MiniStatPill(label = "TOTAL SESI", value = "${sessions.size}", color = TextPrimary)
                             MiniStatPill(label = "SELESAI", value = "$completedCount", color = SuccessGreen)
                             MiniStatPill(label = "HARI INI", value = "$todayPendingCount", color = VoltLime)
                             MiniStatPill(label = "TERLEWAT", value = "$skippedCount", color = KineticCoral)
@@ -810,7 +814,7 @@ fun GoalTrainingScheduleScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                                LegendItem(icon = Icons.AutoMirrored.Filled.DirectionsRun, label = "Long Run", color = Color(0xFFFFA726))
+                                LegendItem(icon = Icons.AutoMirrored.Filled.DirectionsRun, label = "Long Run", color = WarningAmber)
                             }
                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                 LegendItem(icon = Icons.Default.EmojiEvents, label = "Race Day", color = KineticCoral)
@@ -855,7 +859,7 @@ private fun LegendItem(icon: ImageVector, label: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White, fontSize = 11.sp, maxLines = 1)
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = TextPrimary, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -900,7 +904,7 @@ private fun MonthCalendarGridCard(
                     text = monthData.monthTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = TextPrimary
                 )
                 val monthSessionsCount = (1..monthData.daysInMonth).count { day ->
                     val key = String.format(Locale.US, "%04d-%02d-%02d", monthData.year, monthData.monthZeroBased + 1, day)
@@ -1048,8 +1052,8 @@ private fun CalendarDayCell(
             )
             SessionWorkoutType.EASY_LONG -> Triple(
                 Icons.AutoMirrored.Filled.DirectionsRun,
-                Color(0xFFFFA726),
-                Color(0xFFFFA726).copy(alpha = 0.22f)
+                WarningAmber,
+                WarningAmber.copy(alpha = 0.22f)
             )
             SessionWorkoutType.RACE_DAY -> Triple(
                 Icons.Default.EmojiEvents,
@@ -1087,7 +1091,7 @@ private fun CalendarDayCell(
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = TextPrimary,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 2.dp, top = 1.dp)
@@ -1128,7 +1132,7 @@ private fun SessionDetailHighlightCard(
         SessionWorkoutType.INTERVAL -> Pair(Icons.Default.Bolt, VoltLime)
         SessionWorkoutType.TEMPO -> Pair(Icons.Default.LocalFireDepartment, AeroCyan)
         SessionWorkoutType.RECOVERY -> Pair(Icons.Default.Spa, SuccessGreen)
-        SessionWorkoutType.EASY_LONG -> Pair(Icons.AutoMirrored.Filled.DirectionsRun, Color(0xFFFFA726))
+        SessionWorkoutType.EASY_LONG -> Pair(Icons.AutoMirrored.Filled.DirectionsRun, WarningAmber)
         SessionWorkoutType.RACE_DAY -> Pair(Icons.Default.EmojiEvents, KineticCoral)
     }
 
@@ -1205,7 +1209,7 @@ private fun SessionDetailHighlightCard(
                 text = session.sessionTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = TextPrimary
             )
             Text(
                 text = session.displayDate,
@@ -1234,7 +1238,7 @@ private fun SessionDetailHighlightCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontFamily = TelemetryMonoFontFamily,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = TextPrimary,
                         maxLines = 1
                     )
                 }
@@ -1316,7 +1320,7 @@ private fun SessionDetailHighlightCard(
                             Text(
                                 text = session.aiReason,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
                     }
@@ -1456,7 +1460,7 @@ private fun SessionQuickInfoDialog(
         SessionWorkoutType.INTERVAL -> Pair(Icons.Default.Bolt, VoltLime)
         SessionWorkoutType.TEMPO -> Pair(Icons.Default.LocalFireDepartment, AeroCyan)
         SessionWorkoutType.RECOVERY -> Pair(Icons.Default.Spa, SuccessGreen)
-        SessionWorkoutType.EASY_LONG -> Pair(Icons.AutoMirrored.Filled.DirectionsRun, Color(0xFFFFA726))
+        SessionWorkoutType.EASY_LONG -> Pair(Icons.AutoMirrored.Filled.DirectionsRun, WarningAmber)
         SessionWorkoutType.RACE_DAY -> Pair(Icons.Default.EmojiEvents, KineticCoral)
     }
 
@@ -1499,7 +1503,7 @@ private fun SessionQuickInfoDialog(
                     text = session.sessionTitle,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = TextPrimary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1555,7 +1559,7 @@ private fun SessionQuickInfoDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = TelemetryMonoFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
                     }
@@ -1604,7 +1608,7 @@ private fun SessionQuickInfoDialog(
                 Text(
                     text = session.sessionDescription,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = TextPrimary.copy(alpha = 0.9f)
                 )
 
                 // Dynamic AI Reason if present
@@ -1649,7 +1653,7 @@ private fun SessionQuickInfoDialog(
                             Text(
                                 text = "${"%.2f".format(session.matchedWorkout.distanceKm)} km • ${session.matchedWorkout.title} pada pace ${RacePredictionEngine.formatPace(session.matchedWorkout.avgPaceSecondsPerKm)}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
                     }
@@ -1660,7 +1664,7 @@ private fun SessionQuickInfoDialog(
             if (session.status == ScheduledSessionStatus.TODAY_PENDING) {
                 Button(
                     onClick = onNavigateToOcr,
-                    colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = VoltLime, contentColor = OnVoltLime)
                 ) {
                     Icon(imageVector = Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -1669,7 +1673,7 @@ private fun SessionQuickInfoDialog(
             } else {
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = SlateSurface, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = SlateSurface, contentColor = TextPrimary)
                 ) {
                     Text("Tutup")
                 }

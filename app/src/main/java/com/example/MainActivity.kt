@@ -1,12 +1,15 @@
 package com.example
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +22,8 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -29,17 +34,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
@@ -61,13 +66,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,23 +86,33 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.local.LocalRoomRepository
 import com.example.data.local.StrideApexLocalDatabase
 import com.example.data.repository.TrainingRepository
+import com.example.domain.ShoeUnlockEngine
 import com.example.ui.AuthScreen
 import com.example.ui.BiomechanicsLabScreen
 import com.example.ui.DashboardScreen
+import com.example.ui.HistoryScreen
+import com.example.ui.ProgressScreen
 import com.example.ui.RacePredictorAndPrScreen
+import com.example.ui.ShoeDetailScreen
+import com.example.ui.ShoesCatalogScreen
 import com.example.ui.StravaOcrScreen
 import com.example.ui.signOutUser
 import com.example.ui.theme.AeroCyan
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.OnVoltLime
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.StrideApexTheme
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ThemeState
 import com.example.ui.theme.VoltLime
+import com.example.util.AdMobManager
 import com.example.util.configureAppCheck
 import com.example.viewmodel.StrideApexViewModel
+import com.example.viewmodel.UiState
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -109,8 +128,10 @@ enum class StrideApexTab(
     val labelRes: Int,
     val icon: ImageVector
 ) {
+    PROGRESS("progress", R.string.nav_progress, Icons.Default.Insights),
+    SHOES("shoes", R.string.nav_shoes, Icons.Default.ShoppingBag),
     DASHBOARD("dashboard", R.string.nav_dashboard, Icons.Default.Dashboard),
-    STRAVA_OCR("strava_ocr", R.string.nav_ocr_scan, Icons.Default.AddAPhoto),
+    HISTORY("history", R.string.nav_history, Icons.AutoMirrored.Filled.DirectionsRun),
     PREDICT_PRS("predict_prs", R.string.nav_predict_prs, Icons.Default.Speed)
 }
 
@@ -126,12 +147,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize Theme preference
+        ThemeState.initialize(this)
+
         // STEP 1: Configure App Check with launch intent before any UI, ViewModels, or Firebase calls
         configureAppCheck(this, intent)
 
+        // Initialize non-intrusive Google AdMob banner + preloaded short completion ad
+        AdMobManager.initialize(this)
+        AdMobManager.preloadShortAd(this)
+
         enableEdgeToEdge()
         setContent {
-            StrideApexTheme {
+            StrideApexTheme(darkTheme = ThemeState.isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = ObsidianBackground
@@ -218,12 +246,17 @@ fun MainFeatureScreen(
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
     val aiPlanLoading by viewModel.aiPlanLoading.collectAsStateWithLifecycle()
     val aiPlanCoachingInsight by viewModel.aiPlanCoachingInsight.collectAsStateWithLifecycle()
+    val refreshingWorkoutId by viewModel.refreshingWorkoutId.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf(StrideApexTab.DASHBOARD) }
+    var selectedShoeSlug by rememberSaveable { mutableStateOf<String?>(null) }
+    var isScanScreenOpen by rememberSaveable { mutableStateOf(false) }
 
-    if (currentTab != StrideApexTab.DASHBOARD) {
-        BackHandler {
-            currentTab = StrideApexTab.DASHBOARD
+    BackHandler(enabled = isScanScreenOpen || selectedShoeSlug != null || currentTab != StrideApexTab.DASHBOARD) {
+        when {
+            isScanScreenOpen -> isScanScreenOpen = false
+            selectedShoeSlug != null -> selectedShoeSlug = null
+            else -> currentTab = StrideApexTab.DASHBOARD
         }
     }
 
@@ -237,10 +270,13 @@ fun MainFeatureScreen(
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = ObsidianBackground,
-                        titleContentColor = Color.White
+                        titleContentColor = TextPrimary
                     ),
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
                             Surface(
                                 color = SlateSurfaceElevated,
                                 shape = CircleShape,
@@ -257,13 +293,15 @@ fun MainFeatureScreen(
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
                                     text = stringResource(R.string.app_name),
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
@@ -276,35 +314,39 @@ fun MainFeatureScreen(
                                         text = userEmail,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (isOfflineMode) AeroCyan else TextSecondary,
-                                        maxLines = 1
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = { ThemeState.toggle(context) },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .testTag("theme_toggle_button")
+                        ) {
+                            Icon(
+                                imageVector = if (ThemeState.isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = if (ThemeState.isDark) "Ganti ke Mode Terang" else "Ganti ke Mode Gelap",
+                                tint = if (ThemeState.isDark) AeroCyan else VoltLime,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         if (isOfflineMode) {
-                            OutlinedButton(
+                            IconButton(
                                 onClick = onOpenSignIn,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = VoltLime),
                                 modifier = Modifier
-                                    .padding(end = 8.dp)
-                                    .defaultMinSize(minHeight = 44.dp)
+                                    .size(44.dp)
                                     .testTag("open_sign_in_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Login,
-                                    contentDescription = "Sign In for Cloud Sync",
+                                    contentDescription = "Cloud Sign-In",
                                     tint = VoltLime,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Cloud Sign-In",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = VoltLime
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         } else {
@@ -332,40 +374,103 @@ fun MainFeatureScreen(
             },
             bottomBar = {
                 if (!isExpandedScreen) {
-                    NavigationBar(
-                        containerColor = SlateSurface,
+                    Surface(
+                        color = SlateSurface,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.border(
-                            width = 0.5.dp,
-                            color = SlateBorder.copy(alpha = 0.6f)
-                        )
-                    ) {
-                        StrideApexTab.entries.forEach { tab ->
-                            val selected = currentTab == tab
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { currentTab = tab },
-                                icon = {
-                                    Icon(
-                                        imageVector = tab.icon,
-                                        contentDescription = stringResource(tab.labelRes)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = stringResource(tab.labelRes),
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color.Black,
-                                    selectedTextColor = VoltLime,
-                                    indicatorColor = VoltLime,
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
-                                ),
-                                modifier = Modifier.testTag("nav_tab_${tab.route}")
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = 0.5.dp,
+                                color = SlateBorder.copy(alpha = 0.6f)
                             )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .height(64.dp)
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StrideApexTab.entries.forEach { tab ->
+                                val selected = !isScanScreenOpen && currentTab == tab
+                                val isCenterDashboard = tab == StrideApexTab.DASHBOARD
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .defaultMinSize(minHeight = 44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable(role = Role.Tab) {
+                                            selectedShoeSlug = null
+                                            isScanScreenOpen = false
+                                            currentTab = tab
+                                        }
+                                        .testTag("nav_tab_${tab.route}")
+                                ) {
+                                    if (isCenterDashboard) {
+                                        Surface(
+                                            color = if (selected) VoltLime else AeroCyan.copy(alpha = 0.16f),
+                                            shape = CircleShape,
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = if (selected) VoltLime else AeroCyan.copy(alpha = 0.5f),
+                                                    shape = CircleShape
+                                                )
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = tab.icon,
+                                                    contentDescription = stringResource(tab.labelRes),
+                                                    tint = if (selected) OnVoltLime else AeroCyan,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = stringResource(tab.labelRes),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = if (selected) VoltLime else AeroCyan,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (selected) VoltLime else Color.Transparent)
+                                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = tab.icon,
+                                                contentDescription = stringResource(tab.labelRes),
+                                                tint = if (selected) OnVoltLime else TextSecondary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = stringResource(tab.labelRes),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) VoltLime else TextSecondary,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -382,10 +487,14 @@ fun MainFeatureScreen(
                         modifier = Modifier.fillMaxHeight()
                     ) {
                         StrideApexTab.entries.forEach { tab ->
-                            val selected = currentTab == tab
+                            val selected = !isScanScreenOpen && currentTab == tab
                             NavigationRailItem(
                                 selected = selected,
-                                onClick = { currentTab = tab },
+                                onClick = {
+                                    selectedShoeSlug = null
+                                    isScanScreenOpen = false
+                                    currentTab = tab
+                                },
                                 icon = {
                                     Icon(
                                         imageVector = tab.icon,
@@ -399,7 +508,7 @@ fun MainFeatureScreen(
                                     )
                                 },
                                 colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = Color.Black,
+                                    selectedIconColor = OnVoltLime,
                                     selectedTextColor = VoltLime,
                                     indicatorColor = VoltLime,
                                     unselectedIconColor = TextSecondary,
@@ -449,65 +558,125 @@ fun MainFeatureScreen(
                     }
 
                     Box(modifier = Modifier.weight(1f)) {
-                        when (currentTab) {
-                            StrideApexTab.DASHBOARD -> {
-                                DashboardScreen(
-                                    workoutsState = workoutsState,
-                                    prsState = prsState,
-                                    goalsState = goalsState,
-                                    backupsState = backupsState,
-                                    isOfflineMode = isOfflineMode,
-                                    onOpenSignIn = onOpenSignIn,
-                                    onNavigateToOcr = { currentTab = StrideApexTab.STRAVA_OCR },
-                                    onNavigateToPredict = { currentTab = StrideApexTab.PREDICT_PRS },
-                                    onCreateCloudBackup = { label -> viewModel.createCloudBackupCheckpoint(label) },
-                                    onExportBackupJson = { viewModel.exportFullTrainingBackupJson() },
-                                    onDeleteWorkout = { id -> viewModel.deleteWorkout(id) },
-                                    onUpdateWorkout = { id, title, dist, dur, hr, cad, elev, dateEpochMs ->
-                                        viewModel.updateWorkout(id, title, dist, dur, hr, cad, elev, dateEpochMs)
-                                    },
-                                    onAddGoal = { title, cat, sec, wkKm, enabled, hr, min ->
-                                        viewModel.addTrainingGoal(title, cat, sec, wkKm, enabled, hr, min)
-                                    },
-                                    onSaveGoalSchedule = { goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso ->
-                                        viewModel.saveOrUpdateGoalSchedule(goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso)
-                                    },
-                                    onToggleGoalCompleted = { goal -> viewModel.toggleGoalCompleted(goal) },
-                                    onDeleteGoal = { id -> viewModel.deleteGoal(id) },
-                                    onAskGeminiAdvice = { goal -> viewModel.askGeminiForTrainingPlanAdvice(goal) },
-                                    geminiAdviceText = aiPlanCoachingInsight,
-                                    isGeminiLoading = aiPlanLoading
-                                )
+                        val activeWorkouts = (workoutsState as? UiState.Success)?.data ?: emptyList()
+                        val activeShoeDetail = selectedShoeSlug?.let { slug ->
+                            val shoeProgress = remember(activeWorkouts) {
+                                ShoeUnlockEngine.evaluateProgress(activeWorkouts)
                             }
-                            StrideApexTab.STRAVA_OCR -> {
-                                StravaOcrScreen(
-                                    ocrState = ocrState,
-                                    onAnalyzeBitmap = { bmp -> viewModel.analyzeStravaScreenshot(bmp) },
-                                    onSaveWorkout = { title, dist, dur, hr, cad, elev, splits, insight, src, dateEpochMs ->
-                                        viewModel.saveWorkoutAndCheckPr(
-                                            title = title,
-                                            distanceKm = dist,
-                                            durationSeconds = dur,
-                                            avgHeartRate = hr,
-                                            cadenceSpm = cad,
-                                            elevationGainM = elev,
-                                            splitsSummary = splits,
-                                            aiCoachingInsight = insight,
-                                            sourceType = src,
-                                            workoutDateEpochMs = dateEpochMs,
-                                            onComplete = { currentTab = StrideApexTab.DASHBOARD }
-                                        )
-                                    }
-                                )
+                            ShoeUnlockEngine.findShoeBySlug(shoeProgress, slug)?.let { (shoe, tierState) ->
+                                Triple(shoe, tierState, shoeProgress)
                             }
-                            StrideApexTab.PREDICT_PRS -> {
-                                RacePredictorAndPrScreen(
-                                    workoutsState = workoutsState,
-                                    prsState = prsState,
-                                    fatigueExponent = fatigueExponent,
-                                    onFatigueExponentChange = { exp -> viewModel.updateFatigueExponent(exp) },
-                                    onDeletePr = { categoryKey -> viewModel.deletePersonalRecord(categoryKey) }
-                                )
+                        }
+
+                        if (isScanScreenOpen) {
+                            StravaOcrScreen(
+                                ocrState = ocrState,
+                                onAnalyzeBitmap = { bmp -> viewModel.analyzeStravaScreenshot(bmp) },
+                                onSaveWorkout = { title, dist, dur, hr, cad, elev, splits, insight, src, dateEpochMs ->
+                                    viewModel.saveWorkoutAndCheckPr(
+                                        title = title,
+                                        distanceKm = dist,
+                                        durationSeconds = dur,
+                                        avgHeartRate = hr,
+                                        cadenceSpm = cad,
+                                        elevationGainM = elev,
+                                        splitsSummary = splits,
+                                        aiCoachingInsight = insight,
+                                        sourceType = src,
+                                        workoutDateEpochMs = dateEpochMs,
+                                        onComplete = {
+                                            AdMobManager.maybeShowShortAdAfterRunSaved(
+                                                activity = context as? Activity,
+                                                totalWorkoutsCount = activeWorkouts.size + 1
+                                            ) {
+                                                isScanScreenOpen = false
+                                                currentTab = StrideApexTab.HISTORY
+                                            }
+                                        }
+                                    )
+                                },
+                                onBack = { isScanScreenOpen = false }
+                            )
+                        } else if (activeShoeDetail != null) {
+                            val (shoe, tierState, shoeProgress) = activeShoeDetail
+                            ShoeDetailScreen(
+                                shoe = shoe,
+                                tierState = tierState,
+                                shoeProgress = shoeProgress,
+                                onBack = { selectedShoeSlug = null },
+                                onSelectRelatedShoe = { relatedSlug -> selectedShoeSlug = relatedSlug }
+                            )
+                        } else {
+                            when (currentTab) {
+                                StrideApexTab.PROGRESS -> {
+                                    ProgressScreen(
+                                        workoutsState = workoutsState,
+                                        goalsState = goalsState,
+                                        onNavigateToShoes = { currentTab = StrideApexTab.SHOES }
+                                    )
+                                }
+                                StrideApexTab.SHOES -> {
+                                    ShoesCatalogScreen(
+                                        workoutsState = workoutsState,
+                                        onSelectShoe = { slug -> selectedShoeSlug = slug }
+                                    )
+                                }
+                                StrideApexTab.DASHBOARD -> {
+                                    DashboardScreen(
+                                        workoutsState = workoutsState,
+                                        prsState = prsState,
+                                        goalsState = goalsState,
+                                        backupsState = backupsState,
+                                        isOfflineMode = isOfflineMode,
+                                        onOpenSignIn = onOpenSignIn,
+                                        onNavigateToOcr = { isScanScreenOpen = true },
+                                        onNavigateToPredict = { currentTab = StrideApexTab.PREDICT_PRS },
+                                        onNavigateToHistory = { currentTab = StrideApexTab.HISTORY },
+                                        onNavigateToProgress = { currentTab = StrideApexTab.PROGRESS },
+                                        onNavigateToShoes = { currentTab = StrideApexTab.SHOES },
+                                        onCreateCloudBackup = { label -> viewModel.createCloudBackupCheckpoint(label) },
+                                        onExportBackupJson = { viewModel.exportFullTrainingBackupJson() },
+                                        onDeleteWorkout = { id -> viewModel.deleteWorkout(id) },
+                                        onUpdateWorkout = { id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs ->
+                                            viewModel.updateWorkout(id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs)
+                                        },
+                                        refreshingWorkoutId = refreshingWorkoutId,
+                                        onRefreshWorkoutAi = { workout -> viewModel.refreshWorkoutAiAndSplits(workout) },
+                                        onAddGoal = { title, cat, sec, wkKm, enabled, hr, min ->
+                                            viewModel.addTrainingGoal(title, cat, sec, wkKm, enabled, hr, min)
+                                        },
+                                        onSaveGoalSchedule = { goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso ->
+                                            viewModel.saveOrUpdateGoalSchedule(goalId, cleanTitle, cat, targetSec, weeklyKm, startKey, targetKey, daysIso)
+                                        },
+                                        onToggleGoalCompleted = { goal -> viewModel.toggleGoalCompleted(goal) },
+                                        onDeleteGoal = { id -> viewModel.deleteGoal(id) },
+                                        onAskGeminiAdvice = { goal -> viewModel.askGeminiForTrainingPlanAdvice(goal) },
+                                        geminiAdviceText = aiPlanCoachingInsight,
+                                        isGeminiLoading = aiPlanLoading
+                                    )
+                                }
+                                StrideApexTab.HISTORY -> {
+                                    HistoryScreen(
+                                        workoutsState = workoutsState,
+                                        prsState = prsState,
+                                        onDeleteWorkout = { id -> viewModel.deleteWorkout(id) },
+                                        onUpdateWorkout = { id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs ->
+                                            viewModel.updateWorkout(id, title, dist, dur, hr, cad, elev, splits, insight, dateEpochMs)
+                                        },
+                                        onCreateCloudBackup = { label -> viewModel.createCloudBackupCheckpoint(label) },
+                                        refreshingWorkoutId = refreshingWorkoutId,
+                                        onRefreshWorkoutAi = { workout -> viewModel.refreshWorkoutAiAndSplits(workout) }
+                                    )
+                                }
+                                StrideApexTab.PREDICT_PRS -> {
+                                    RacePredictorAndPrScreen(
+                                        workoutsState = workoutsState,
+                                        prsState = prsState,
+                                        fatigueExponent = fatigueExponent,
+                                        onFatigueExponentChange = { exp -> viewModel.updateFatigueExponent(exp) },
+                                        onDeletePr = { categoryKey -> viewModel.deletePersonalRecord(categoryKey) }
+                                    )
+                                }
                             }
                         }
                     }

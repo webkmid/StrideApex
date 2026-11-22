@@ -60,8 +60,10 @@ import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
+import com.example.util.AdBannerBar
 import com.example.viewmodel.UiState
 
 @Composable
@@ -132,7 +134,7 @@ fun RacePredictorAndPrScreen(
                             Text(
                                 text = "Personal Records",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
+                                color = TextPrimary,
                                 maxLines = 1
                             )
                         }
@@ -172,7 +174,7 @@ fun RacePredictorAndPrScreen(
                                     Text(
                                         text = "${category.shortLabel} • ${category.displayName}",
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = Color.White
+                                        color = TextPrimary
                                     )
                                     Text(
                                         text = if (record != null) "Dari: ${record.workoutTitle}" else "Belum ada rekor di riwayat",
@@ -275,7 +277,7 @@ fun RacePredictorAndPrScreen(
                             Text(
                                 text = "Race Predictions",
                                 style = MaterialTheme.typography.titleLarge,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
                         if (predictions.isNotEmpty()) {
@@ -351,7 +353,7 @@ fun RacePredictorAndPrScreen(
                                         Text(
                                             text = pred.category.displayName,
                                             style = MaterialTheme.typography.titleMedium,
-                                            color = Color.White,
+                                            color = TextPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -383,6 +385,15 @@ fun RacePredictorAndPrScreen(
                 }
             }
         }
+
+        // 3. Banner Iklan Non-Intrusif
+        item {
+            AdBannerBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            )
+        }
     }
 }
 
@@ -402,7 +413,7 @@ fun VdotInfoDialog(onDismiss: () -> Unit) {
         title = {
             Text(
                 text = "Apa itu VDOT?",
-                color = Color.White,
+                color = TextPrimary,
                 style = MaterialTheme.typography.titleLarge
             )
         },
@@ -411,7 +422,7 @@ fun VdotInfoDialog(onDismiss: () -> Unit) {
                 Text(
                     text = "VDOT adalah indikator kapasitas aerobik lari (running fitness) yang dirumuskan oleh Dr. Jack Daniels dalam 'Daniels' Running Formula'.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
+                    color = TextPrimary
                 )
                 Text(
                     text = "• Dihitung otomatis dari waktu dan jarak tempuh terbaik di riwayat lari Anda (tanpa perlu input manual).",

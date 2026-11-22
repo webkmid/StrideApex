@@ -158,7 +158,12 @@ class TrainingRepository(private val db: FirebaseFirestore) {
 
     suspend fun addWorkout(workout: WorkoutLog): String {
         val uid = requireUserId()
-        val docRef = db.collection("users").document(uid).collection("workouts").document()
+        val workoutsCol = db.collection("users").document(uid).collection("workouts")
+        val docRef = if (workout.id.isNotBlank() && !workout.id.startsWith("local_")) {
+            workoutsCol.document(workout.id)
+        } else {
+            workoutsCol.document()
+        }
         val safePace = if (workout.avgPaceSecondsPerKm in 60..3600) {
             workout.avgPaceSecondsPerKm
         } else if (workout.distanceKm > 0.0) {
@@ -178,7 +183,7 @@ class TrainingRepository(private val db: FirebaseFirestore) {
             "splitsSummary" to workout.splitsSummary.take(1000),
             "aiCoachingInsight" to workout.aiCoachingInsight.take(2000),
             "sourceType" to if (workout.sourceType in listOf("STRAVA_OCR", "MANUAL")) workout.sourceType else "MANUAL",
-            "createdAt" to FieldValue.serverTimestamp(),
+            "createdAt" to (workout.createdAt ?: FieldValue.serverTimestamp()),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
@@ -316,7 +321,12 @@ class TrainingRepository(private val db: FirebaseFirestore) {
 
     suspend fun addGoal(goal: TrainingGoal): String {
         val uid = requireUserId()
-        val docRef = db.collection("users").document(uid).collection("goals").document()
+        val goalsCol = db.collection("users").document(uid).collection("goals")
+        val docRef = if (goal.id.isNotBlank() && !goal.id.startsWith("local_")) {
+            goalsCol.document(goal.id)
+        } else {
+            goalsCol.document()
+        }
         val category = DistanceCategory.fromKey(goal.targetDistanceCategory)
         val payload = mapOf(
             "userId" to uid,
@@ -328,7 +338,7 @@ class TrainingRepository(private val db: FirebaseFirestore) {
             "reminderHour" to goal.reminderHour.coerceIn(0L, 23L),
             "reminderMinute" to goal.reminderMinute.coerceIn(0L, 59L),
             "completed" to goal.completed,
-            "createdAt" to FieldValue.serverTimestamp(),
+            "createdAt" to (goal.createdAt ?: FieldValue.serverTimestamp()),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
@@ -411,6 +421,63 @@ class TrainingRepository(private val db: FirebaseFirestore) {
             throw e
         }
     }
+
+    suspend fun addBackupSnapshot(backup: CloudBackupSnapshot): String {
+        val uid = requireUserId()
+        val backupsCol = db.collection("users").document(uid).collection("backups")
+        val docRef = if (backup.id.isNotBlank() && !backup.id.startsWith("local_")) {
+            backupsCol.document(backup.id)
+        } else {
+            backupsCol.document()
+        }
+        val payload = mapOf(
+            "userId" to uid,
+            "backupLabel" to backup.backupLabel.trim().take(120).ifBlank { "Cloud Training Checkpoint" },
+            "workoutCount" to backup.workoutCount.coerceIn(0L, 10000L),
+            "prCount" to backup.prCount.coerceIn(0L, 1000L),
+            "goalCount" to backup.goalCount.coerceIn(0L, 1000L),
+            "summaryNotes" to backup.summaryNotes.take(4000),
+            "createdAt" to (backup.createdAt ?: FieldValue.serverTimestamp()),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        try {
+            docRef.set(payload).await()
+            return docRef.id
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            throw e
+        }
+    }
+
+    private suspend fun <T : Any> fetchCollection(
+        collectionName: String,
+        clazz: Class<T>,
+        mapper: (DocumentSnapshot, T) -> T
+    ): List<T> {
+        val uid = requireUserId()
+        val snapshot = db.collection("users")
+            .document(uid)
+            .collection(collectionName)
+            .get()
+            .await()
+        return snapshot.documents.mapNotNull { doc ->
+            doc.toObject(clazz, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.let { mapper(doc, it) }
+        }
+    }
+
+    suspend fun getWorkouts(): List<WorkoutLog> =
+        fetchCollection("workouts", WorkoutLog::class.java) { doc, item -> item.copy(id = doc.id) }
+
+    suspend fun getPersonalRecords(): List<PersonalRecord> =
+        fetchCollection("personalRecords", PersonalRecord::class.java) { doc, item -> item.copy(id = doc.id) }
+
+    suspend fun getGoals(): List<TrainingGoal> =
+        fetchCollection("goals", TrainingGoal::class.java) { doc, item -> item.copy(id = doc.id) }
+
+    suspend fun getBackups(): List<CloudBackupSnapshot> =
+        fetchCollection("backups", CloudBackupSnapshot::class.java) { doc, item -> item.copy(id = doc.id) }
 
     suspend fun seedInitialStarterData() {
         // Starter dummy data removed so the app starts completely clean

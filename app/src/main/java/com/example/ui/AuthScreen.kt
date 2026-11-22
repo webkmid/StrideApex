@@ -74,6 +74,7 @@ import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SlateSurfaceElevated
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -284,7 +285,7 @@ fun AuthScreen(
                         Text(
                             text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.displayMedium,
-                            color = Color.White
+                            color = TextPrimary
                         )
                     }
                 }
@@ -446,7 +447,7 @@ private fun AuthFeaturePill(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White
+                color = TextPrimary
             )
         }
     }

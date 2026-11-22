@@ -16,8 +16,8 @@ enum class SessionWorkoutType(
     val shortBadge: String,
     val zoneLabel: String
 ) {
-    INTERVAL("INTERVAL", "Interval / Speed Run", "INTERVAL", "Zona 4 (VO2Max)"),
-    TEMPO("TEMPO", "Tempo / Threshold Run", "TEMPO", "Zona 3 (Threshold)"),
+    INTERVAL("INTERVAL", "Interval / Speed Run", "INTERVAL", "Zona 5 (VO2Max)"),
+    TEMPO("TEMPO", "Tempo / Threshold Run", "TEMPO", "Zona 4 (Threshold)"),
     RECOVERY("RECOVERY", "Recovery / Easy Run", "RECOVERY", "Zona 1-2 (Pemulihan)"),
     EASY_LONG("EASY_LONG", "Long Easy / Endurance Run", "LONG RUN", "Zona 2 (Endurance)"),
     RACE_DAY("RACE_DAY", "Race Day Target!", "RACE DAY", "Target Pace Lomba")

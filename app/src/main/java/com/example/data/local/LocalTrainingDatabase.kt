@@ -163,6 +163,12 @@ interface LocalTrainingDao {
     @Query("SELECT * FROM local_workouts ORDER BY createdAtEpochMs DESC")
     suspend fun getAllWorkouts(): List<LocalWorkoutEntity>
 
+    @Query("SELECT * FROM local_personal_records ORDER BY distanceMeters ASC")
+    suspend fun getAllPersonalRecords(): List<LocalPrEntity>
+
+    @Query("SELECT * FROM local_goals ORDER BY createdAtEpochMs DESC")
+    suspend fun getAllGoals(): List<LocalGoalEntity>
+
     @Query("SELECT * FROM local_goals ORDER BY createdAtEpochMs DESC")
     fun observeGoals(): Flow<List<LocalGoalEntity>>
 
@@ -175,8 +181,14 @@ interface LocalTrainingDao {
     @Query("SELECT * FROM local_backups ORDER BY createdAtEpochMs DESC")
     fun observeBackups(): Flow<List<LocalBackupEntity>>
 
+    @Query("SELECT * FROM local_backups ORDER BY createdAtEpochMs DESC")
+    suspend fun getAllBackups(): List<LocalBackupEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBackup(backup: LocalBackupEntity)
+
+    @Query("DELETE FROM local_backups WHERE id = :backupId")
+    suspend fun deleteBackupById(backupId: String)
 }
 
 @Database(

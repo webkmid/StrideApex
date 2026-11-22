@@ -124,54 +124,78 @@ class LocalRoomRepository(private val dao: LocalTrainingDao) {
         return dao.getAllWorkouts().map { it.toDomainModel() }
     }
 
+    suspend fun getAllPersonalRecordsList(): List<PersonalRecord> {
+        return dao.getAllPersonalRecords().map { it.toDomainModel() }
+    }
+
+    suspend fun getAllGoalsList(): List<TrainingGoal> {
+        return dao.getAllGoals().map { it.toDomainModel() }
+    }
+
+    suspend fun getAllBackupsList(): List<CloudBackupSnapshot> {
+        return dao.getAllBackups().map { it.toDomainModel() }
+    }
+
+    private fun TrainingGoal.toLocalEntity(entityId: String): LocalGoalEntity {
+        val category = DistanceCategory.fromKey(targetDistanceCategory)
+        return LocalGoalEntity(
+            id = entityId,
+            title = title.trim().take(120).ifBlank { "Race Goal" },
+            targetDistanceCategory = category.key,
+            targetTimeSeconds = targetTimeSeconds.coerceIn(1L, 864000L),
+            weeklyMileageTargetKm = weeklyMileageTargetKm.coerceIn(1L, 400L),
+            reminderEnabled = reminderEnabled,
+            reminderHour = reminderHour.coerceIn(0L, 23L),
+            reminderMinute = reminderMinute.coerceIn(0L, 59L),
+            completed = completed,
+            createdAtEpochMs = createdAt?.toDate()?.time ?: System.currentTimeMillis()
+        )
+    }
+
     suspend fun addGoal(goal: TrainingGoal): String {
         val id = goal.id.ifBlank { "local_goal_${UUID.randomUUID()}" }
-        val category = DistanceCategory.fromKey(goal.targetDistanceCategory)
-        dao.insertGoal(
-            LocalGoalEntity(
-                id = id,
-                title = goal.title.trim().take(120).ifBlank { "Race Goal" },
-                targetDistanceCategory = category.key,
-                targetTimeSeconds = goal.targetTimeSeconds.coerceIn(1L, 864000L),
-                weeklyMileageTargetKm = goal.weeklyMileageTargetKm.coerceIn(1L, 400L),
-                reminderEnabled = goal.reminderEnabled,
-                reminderHour = goal.reminderHour.coerceIn(0L, 23L),
-                reminderMinute = goal.reminderMinute.coerceIn(0L, 59L),
-                completed = goal.completed
-            )
-        )
+        dao.insertGoal(goal.toLocalEntity(id))
         return id
     }
 
     suspend fun updateGoal(goal: TrainingGoal) {
         if (goal.id.isBlank()) return
-        val category = DistanceCategory.fromKey(goal.targetDistanceCategory)
-        dao.insertGoal(
-            LocalGoalEntity(
-                id = goal.id,
-                title = goal.title.trim().take(120).ifBlank { "Race Goal" },
-                targetDistanceCategory = category.key,
-                targetTimeSeconds = goal.targetTimeSeconds.coerceIn(1L, 864000L),
-                weeklyMileageTargetKm = goal.weeklyMileageTargetKm.coerceIn(1L, 400L),
-                reminderEnabled = goal.reminderEnabled,
-                reminderHour = goal.reminderHour.coerceIn(0L, 23L),
-                reminderMinute = goal.reminderMinute.coerceIn(0L, 59L),
-                completed = goal.completed
-            )
-        )
+        dao.insertGoal(goal.toLocalEntity(goal.id))
     }
 
     suspend fun deleteGoal(goalId: String) {
         dao.deleteGoalById(goalId)
     }
 
+    suspend fun deleteBackup(backupId: String) {
+        dao.deleteBackupById(backupId)
+    }
+
+    suspend fun upsertBackupSnapshot(backup: CloudBackupSnapshot): String {
+        val id = backup.id.ifBlank { "local_bkp_${UUID.randomUUID()}" }
+        dao.insertBackup(
+            LocalBackupEntity(
+                id = id,
+                backupLabel = backup.backupLabel.trim().take(120).ifBlank { "Snapshot" },
+                workoutCount = backup.workoutCount,
+                prCount = backup.prCount,
+                goalCount = backup.goalCount,
+                summaryNotes = backup.summaryNotes.take(4000),
+                createdAtEpochMs = backup.createdAt?.toDate()?.time ?: System.currentTimeMillis()
+            )
+        )
+        return id
+    }
+
     suspend fun createLocalBackupSnapshot(
         label: String,
         workouts: List<WorkoutLog>,
         prs: List<PersonalRecord>,
-        goals: List<TrainingGoal>
+        goals: List<TrainingGoal>,
+        explicitId: String = "",
+        createdAtEpochMs: Long = System.currentTimeMillis()
     ): String {
-        val id = "local_bkp_${UUID.randomUUID()}"
+        val id = explicitId.ifBlank { "local_bkp_${UUID.randomUUID()}" }
         val totalKm = workouts.sumOf { it.distanceKm }
         val summaryDigest = buildString {
             append("SQLite Snapshot: ${"%.1f".format(totalKm)} km across ${workouts.size} workouts. ")
@@ -192,7 +216,8 @@ class LocalRoomRepository(private val dao: LocalTrainingDao) {
                 workoutCount = workouts.size.toLong(),
                 prCount = prs.size.toLong(),
                 goalCount = goals.size.toLong(),
-                summaryNotes = summaryDigest
+                summaryNotes = summaryDigest,
+                createdAtEpochMs = createdAtEpochMs
             )
         )
         return id

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,14 +31,17 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,7 +53,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +75,7 @@ import com.example.ui.theme.SlateBorder
 import com.example.ui.theme.SlateSurface
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TelemetryMonoFontFamily
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VoltLime
 import com.example.ui.theme.WarningAmber
@@ -78,8 +85,8 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-private val StravaBlue = Color(0xFF2979FF)
-private val StravaLightBlue = Color(0xFF68A6FF)
+private val StravaBlue get() = VoltLime
+private val StravaLightBlue get() = AeroCyan
 
 data class PrEvaluationResult(
     val categoryLabel: String,
@@ -115,6 +122,8 @@ fun WorkoutDetailScreen(
     onBack: () -> Unit,
     onEditWorkout: (WorkoutLog) -> Unit,
     onDeleteWorkout: (String) -> Unit,
+    isRefreshingAi: Boolean = false,
+    onRefreshAi: ((WorkoutLog) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
@@ -166,30 +175,55 @@ fun WorkoutDetailScreen(
             val predictions = RacePredictionEngine.computeRacePredictions(allWorkouts.ifEmpty { listOf(workout) }, prs, 1.06)
             val tenK = predictions.firstOrNull { it.category == DistanceCategory.TEN_K }?.targetPaceSecondsPerKm
                 ?: (avgPaceSec * (10.0 / safeDist).pow(0.06)).roundToLong()
-            (tenK * 1.025).roundToLong().coerceIn(150L, 600L)
+            // In Jack Daniels VDOT tables, T-Pace (~88% VO2max) is ~1.03x 10K race pace (~91% VO2max)
+            (tenK * 1.03).roundToLong().coerceIn(150L, 600L)
         } else {
-            // No explicit PRs logged: calibrate threshold based on cardiovascular effort / heart rate
-            val isHrAvailable = workout.avgHeartRate > 0L
-            val hrMax = 190.0 // Standard runner Max HR baseline
-            val hrRatio = if (isHrAvailable) (workout.avgHeartRate.toDouble() / hrMax).coerceIn(0.55, 1.0) else null
+            // Check any explicit race workout logged in history even without formal PR records
+            val explicitRaceBaseline = allWorkouts
+                .filter { w ->
+                    val t = w.title.lowercase(Locale.ROOT)
+                    w.distanceKm >= 1.5 && w.durationSeconds > 60L && (
+                        t.contains("race") || t.contains("lomba") || t.contains("time trial") ||
+                            t.contains("pb") || t.contains("pr ") || t.endsWith(" pr")
+                        )
+                }
+                .minOfOrNull { w ->
+                    val wPace = (w.durationSeconds.toDouble() / w.distanceKm).coerceIn(120.0, 900.0)
+                    val tenKFromRace = wPace * (10.0 / w.distanceKm).pow(0.06)
+                    (tenKFromRace * 1.03).roundToLong().coerceIn(150L, 600L)
+                }
 
-            val paceToThresholdRatio = when {
-                // High cardiovascular load (>88% HRmax): near-threshold / anaerobic interval
-                hrRatio != null && hrRatio >= 0.90 -> 0.96
-                hrRatio != null && hrRatio >= 0.82 -> 1.02
-                hrRatio != null && hrRatio >= 0.75 -> 1.10
-                isExplicitRaceEffort -> 1.025
-                // Standard everyday aerobic base / easy run: Jack Daniels E-Pace is ~1.18 - 1.25x T-Pace
-                else -> 1.22
+            val thisRunThreshold = if (isExplicitRaceEffort) {
+                val tenKFromThisRace = avgPaceSec * (10.0 / safeDist).pow(0.06)
+                (tenKFromThisRace * 1.03).roundToLong().coerceIn(150L, 600L)
+            } else {
+                // Calibrate T-Pace physiologically from cardiovascular intensity (%MaxHR)
+                val isHrAvailable = workout.avgHeartRate > 0L
+                val hrMax = 190.0
+                val hrRatio = if (isHrAvailable) (workout.avgHeartRate.toDouble() / hrMax).coerceIn(0.55, 1.0) else null
+
+                val paceToThresholdRatio = when {
+                    hrRatio != null && hrRatio >= 0.91 -> 0.94 // Zone 5: VO2Max / Anaerobic (> T-speed)
+                    hrRatio != null && hrRatio >= 0.85 -> 1.00 // Zone 4: Lactate Threshold (T-Pace ~85-90% HRmax)
+                    hrRatio != null && hrRatio >= 0.79 -> 1.08 // Zone 3: Marathon / Aerobic Tempo (79-84% HRmax)
+                    hrRatio != null && hrRatio >= 0.72 -> 1.18 // Zone 2: Easy / Aerobic Base (72-78% HRmax)
+                    hrRatio != null -> 1.26                    // Zone 1-2: Light Recovery (<72% HRmax)
+                    else -> 1.20                               // No HR: standard everyday aerobic base run
+                }
+                (avgPaceSec / paceToThresholdRatio).roundToLong().coerceIn(150L, 600L)
             }
 
-            (avgPaceSec / paceToThresholdRatio).roundToLong().coerceIn(150L, 600L)
+            if (explicitRaceBaseline != null) {
+                minOf(thisRunThreshold, explicitRaceBaseline)
+            } else {
+                thisRunThreshold
+            }
         }
     }
 
     // Calibrate VDOT score from the scientifically determined Threshold Pace
     val vdotScore = remember(thresholdPaceSec) {
-        val tenKEquivSec = (thresholdPaceSec / 1.025 * 10.0).roundToLong()
+        val tenKEquivSec = (thresholdPaceSec / 1.03 * 10.0).roundToLong()
         RacePredictionEngine.calculateVdot(10000.0, tenKEquivSec)
     }
 
@@ -299,7 +333,7 @@ fun WorkoutDetailScreen(
                         Text(
                             text = workout.title.ifBlank { "Running Session" },
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
+                            color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -369,7 +403,7 @@ fun WorkoutDetailScreen(
                         DetailMetricTile(
                             label = "MOVING TIME",
                             value = RacePredictionEngine.formatDuration(safeDur),
-                            accentColor = Color.White,
+                            accentColor = TextPrimary,
                             icon = Icons.Default.Timer,
                             modifier = Modifier.weight(1f)
                         )
@@ -455,7 +489,7 @@ fun WorkoutDetailScreen(
                         Text(
                             text = "HASIL & PERINGKAT PERSONAL RECORD",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
+                            color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -518,7 +552,7 @@ fun WorkoutDetailScreen(
                                 Text(
                                     text = "Kategori ${eval.categoryLabel}",
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
 
@@ -570,7 +604,7 @@ fun WorkoutDetailScreen(
                         Text(
                             text = "PACE ANALYSIS",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
+                            color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -600,7 +634,7 @@ fun WorkoutDetailScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontFamily = TelemetryMonoFontFamily,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                             }
                         }
@@ -645,6 +679,7 @@ fun WorkoutDetailScreen(
 
                     StravaPaceAreaChart(
                         paceSamples = paceSegments.map { it.paceSecondsPerKm },
+                        splits = parsedSplits,
                         avgPaceSec = avgPaceSec,
                         totalDistanceKm = safeDist
                     )
@@ -686,7 +721,7 @@ fun WorkoutDetailScreen(
                         Text(
                             text = "PACE ZONE (FORMULA VDOT)",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
+                            color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -748,7 +783,7 @@ fun WorkoutDetailScreen(
                                         Text(
                                             text = zone.zoneTitle,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White,
+                                            color = TextPrimary,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                         Text(
@@ -828,7 +863,7 @@ fun WorkoutDetailScreen(
                             Text(
                                 text = "HEART RATE INSIGHT",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
+                                color = TextPrimary,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -881,7 +916,7 @@ fun WorkoutDetailScreen(
                             Text(
                                 text = hrInsightDesc,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White
+                                color = TextPrimary
                             )
                         }
                     }
@@ -901,38 +936,106 @@ fun WorkoutDetailScreen(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = VoltLime.copy(alpha = 0.2f),
-                            shape = CircleShape,
-                            modifier = Modifier.size(32.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Insights,
-                                    contentDescription = "Analisis Latihan",
-                                    tint = VoltLime,
-                                    modifier = Modifier.size(18.dp)
+                            Surface(
+                                color = VoltLime.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Insights,
+                                        contentDescription = "Analisis Latihan",
+                                        tint = VoltLime,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "EVALUASI PERFORMA MENYELURUH",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = VoltLime,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Sintesis AI Coach, Jarak, PR, Split, Zona VDOT & HR",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "EVALUASI PERFORMA MENYELURUH",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = VoltLime,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Sintesis dari Jarak, PR, Split, Zona VDOT & Heart Rate",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
-                            )
+
+                        if (onRefreshAi != null) {
+                            OutlinedButton(
+                                onClick = { if (!isRefreshingAi) onRefreshAi(workout) },
+                                enabled = !isRefreshingAi,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, AeroCyan.copy(alpha = 0.6f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 34.dp)
+                            ) {
+                                if (isRefreshingAi) {
+                                    CircularProgressIndicator(
+                                        color = AeroCyan,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh AI",
+                                        tint = AeroCyan,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isRefreshingAi) "Memuat..." else "Refresh AI",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AeroCyan,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    if (workout.aiCoachingInsight.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
+                            color = ObsidianBackground,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, AeroCyan.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = "ANALISIS AI COACH",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AeroCyan
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = workout.aiCoachingInsight,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextPrimary,
+                                    lineHeight = 21.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Surface(
                         color = ObsidianBackground,
@@ -940,13 +1043,21 @@ fun WorkoutDetailScreen(
                         border = BorderStroke(1.dp, SlateBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = fullAiSynthesis,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White,
-                            lineHeight = 21.sp,
-                            modifier = Modifier.padding(14.dp)
-                        )
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "RINGKASAN TELEMETRI & ZONA VDOT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = VoltLime
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = fullAiSynthesis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                lineHeight = 21.sp
+                            )
+                        }
                     }
                 }
             }
@@ -1002,17 +1113,23 @@ fun StravaPaceAreaChart(
     paceSamples: List<Long>,
     avgPaceSec: Long,
     totalDistanceKm: Double,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    splits: List<StravaSplitItem> = emptyList()
 ) {
-    if (paceSamples.isEmpty()) return
+    val chartPaces = if (splits.isNotEmpty()) splits.map { it.paceSeconds } else paceSamples
+    if (chartPaces.isEmpty()) return
 
-    val minPace = (paceSamples.minOrNull() ?: avgPaceSec).coerceAtMost(avgPaceSec - 25L).coerceAtLeast(120L)
-    val maxPace = (paceSamples.maxOrNull() ?: avgPaceSec).coerceAtLeast(avgPaceSec + 35L)
-    val paceRange = (maxPace - minPace).coerceAtLeast(45L)
+    val minRaw = chartPaces.minOrNull() ?: avgPaceSec
+    val maxRaw = chartPaces.maxOrNull() ?: avgPaceSec
+    val spreadRaw = (maxRaw - minRaw).coerceAtLeast(10L)
+    val pad = (spreadRaw * 0.18).roundToLong().coerceAtLeast(6L)
+    val minPace = minOf(minRaw - pad, avgPaceSec - 4L).coerceAtLeast(120L)
+    val maxPace = maxOf(maxRaw + pad, avgPaceSec + 4L).coerceAtLeast(minPace + 24L)
+    val paceRange = (maxPace - minPace).coerceAtLeast(24L)
 
-    val topPaceLabel = RacePredictionEngine.formatPace(minPace).removeSuffix("/km")
-    val midPaceLabel = RacePredictionEngine.formatPace((minPace + maxPace) / 2).removeSuffix("/km")
-    val botPaceLabel = RacePredictionEngine.formatPace(maxPace).removeSuffix("/km")
+    val topPaceLabel = RacePredictionEngine.formatPace(minPace).removeSuffix("/km").trim()
+    val midPaceLabel = RacePredictionEngine.formatPace((minPace + maxPace) / 2).removeSuffix("/km").trim()
+    val botPaceLabel = RacePredictionEngine.formatPace(maxPace).removeSuffix("/km").trim()
 
     Surface(
         color = ObsidianBackground,
@@ -1021,26 +1138,80 @@ fun StravaPaceAreaChart(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // Micro legend matching StravaSplitsBarChart
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .width(14.dp)
+                            .height(2.dp)
+                            .background(VoltLime)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Avg ${RacePredictionEngine.formatPace(avgPaceSec)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = TelemetryMonoFontFamily,
+                        fontSize = 10.sp,
+                        color = VoltLime
+                    )
+                }
+                if (splits.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(SuccessGreen)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Cepat", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, color = SuccessGreen)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(KineticCoral)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Lambat", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp, color = KineticCoral)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(150.dp)
             ) {
-                // Y-Axis Pace Labels (Faster at top, Slower at bottom, like Strava)
+                // Fixed-width Y-Axis Pace Labels (Faster at top, Slower at bottom)
                 Column(
                     modifier = Modifier
+                        .width(42.dp)
                         .height(150.dp)
-                        .padding(end = 8.dp),
+                        .padding(end = 6.dp),
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(text = topPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
-                    Text(text = midPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
-                    Text(text = botPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
-                    Text(text = "/km", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 9.sp)
+                    Text(text = topPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+                    Text(text = midPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+                    Text(text = botPaceLabel, style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+                    Text(text = "/km", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 9.sp, maxLines = 1)
                 }
 
-                // Area Chart Canvas
+                // Area Chart Canvas aligned 1-to-1 with splits
                 Canvas(
                     modifier = Modifier
                         .weight(1f)
@@ -1048,6 +1219,8 @@ fun StravaPaceAreaChart(
                 ) {
                     val w = size.width
                     val h = size.height
+                    val horizontalPad = if (splits.isNotEmpty()) 6.dp.toPx() else 0f
+                    val usableW = (w - horizontalPad * 2f).coerceAtLeast(1f)
 
                     // Horizontal grid lines
                     for (i in 0..3) {
@@ -1060,34 +1233,51 @@ fun StravaPaceAreaChart(
                         )
                     }
 
-                    val stepX = if (paceSamples.size > 1) w / (paceSamples.size - 1) else w
-                    val linePath = Path()
-                    val areaPath = Path()
+                    // Average pace dashed reference line
+                    val avgNorm = ((avgPaceSec - minPace).toFloat() / paceRange.toFloat()).coerceIn(0.06f, 0.94f)
+                    val avgY = avgNorm * h
+                    drawLine(
+                        color = VoltLime.copy(alpha = 0.7f),
+                        start = Offset(0f, avgY),
+                        end = Offset(w, avgY),
+                        strokeWidth = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                    )
 
-                    paceSamples.forEachIndexed { index, pace ->
-                        val x = index * stepX
-                        val normalized = ((pace - minPace).toFloat() / paceRange.toFloat()).coerceIn(0.06f, 0.94f)
-                        val y = normalized * h
-
-                        if (index == 0) {
-                            linePath.moveTo(x, y)
-                            areaPath.moveTo(x, h)
-                            areaPath.lineTo(x, y)
-                        } else {
-                            linePath.lineTo(x, y)
-                            areaPath.lineTo(x, y)
+                    val points = if (chartPaces.size == 1) {
+                        val norm = ((chartPaces[0] - minPace).toFloat() / paceRange.toFloat()).coerceIn(0.08f, 0.92f)
+                        val y = norm * h
+                        listOf(Offset(horizontalPad, y), Offset(w - horizontalPad, y))
+                    } else {
+                        val stepX = usableW / (chartPaces.size - 1)
+                        chartPaces.mapIndexed { index, pace ->
+                            val x = horizontalPad + index * stepX
+                            val normalized = ((pace - minPace).toFloat() / paceRange.toFloat()).coerceIn(0.08f, 0.92f)
+                            Offset(x, normalized * h)
                         }
                     }
 
-                    areaPath.lineTo(w, h)
+                    val linePath = Path()
+                    val areaPath = Path()
+                    points.forEachIndexed { idx, pt ->
+                        if (idx == 0) {
+                            linePath.moveTo(pt.x, pt.y)
+                            areaPath.moveTo(pt.x, h)
+                            areaPath.lineTo(pt.x, pt.y)
+                        } else {
+                            linePath.lineTo(pt.x, pt.y)
+                            areaPath.lineTo(pt.x, pt.y)
+                        }
+                    }
+                    areaPath.lineTo(points.last().x, h)
                     areaPath.close()
 
                     drawPath(
                         path = areaPath,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                StravaLightBlue.copy(alpha = 0.72f),
-                                StravaBlue.copy(alpha = 0.25f)
+                                StravaLightBlue.copy(alpha = 0.55f),
+                                StravaBlue.copy(alpha = 0.14f)
                             )
                         )
                     )
@@ -1095,28 +1285,86 @@ fun StravaPaceAreaChart(
                     drawPath(
                         path = linePath,
                         color = StravaLightBlue,
-                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(
+                            width = 2.8.dp.toPx(),
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
                     )
+
+                    // Split marker dots matching faster/slower coloring
+                    if (splits.isNotEmpty()) {
+                        val dotPoints = if (splits.size == 1) {
+                            listOf(Offset(w / 2f, points.first().y) to splits.first().paceSeconds)
+                        } else {
+                            points.mapIndexed { idx, pt -> pt to splits[idx].paceSeconds }
+                        }
+                        dotPoints.forEach { (pt, pace) ->
+                            val dotColor = if (pace <= avgPaceSec) SuccessGreen else KineticCoral
+                            drawCircle(
+                                color = ObsidianBackground,
+                                radius = 5.dp.toPx(),
+                                center = pt
+                            )
+                            drawCircle(
+                                color = dotColor,
+                                radius = 3.5.dp.toPx(),
+                                center = pt
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // X-Axis Distance Ticks
+            // X-Axis Ticks aligned directly under Canvas
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 32.dp),
+                    .padding(start = 42.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                val ticks = listOf(0.2, 0.4, 0.6, 0.8, 1.0).map { totalDistanceKm * it }
-                ticks.forEach { d ->
-                    Text(
-                        text = "${"%.1f".format(d)} km",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                        fontSize = 10.sp
-                    )
+                if (splits.isNotEmpty()) {
+                    val displayedSplits = if (splits.size <= 6) {
+                        splits
+                    } else {
+                        val indices = (0..4).map { step ->
+                            ((step * (splits.size - 1)) / 4.0).roundToInt().coerceIn(0, splits.lastIndex)
+                        }.distinct()
+                        indices.map { splits[it] }
+                    }
+                    if (displayedSplits.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "KM ${displayedSplits[0].km}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                    } else {
+                        displayedSplits.forEach { sp ->
+                            Text(
+                                text = "KM ${sp.km}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                } else {
+                    val ticks = listOf(0.0, 0.25, 0.5, 0.75, 1.0).map { totalDistanceKm * it }
+                    ticks.forEachIndexed { idx, d ->
+                        Text(
+                            text = if (idx == 0) "0 km" else "${"%.1f".format(d)} km",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -1124,7 +1372,7 @@ fun StravaPaceAreaChart(
 }
 
 /**
- * Deterministic, piecewise linear pace interpolation from actual recorded splits.
+ * Deterministic pace segments derived strictly from actual recorded splits (for VDOT zone integration).
  * Zero random numbers or dummy trigonometric waves.
  */
 private fun buildDeterministicPaceSegments(
@@ -1134,45 +1382,36 @@ private fun buildDeterministicPaceSegments(
     totalDurationSec: Long
 ): List<PaceSegmentSample> {
     val segments = mutableListOf<PaceSegmentSample>()
-    val subStepsPerKm = 10 // 0.1 km resolution
 
     if (splits.isNotEmpty()) {
-        val paces = splits.map { it.paceSeconds }
-        for (i in paces.indices) {
-            val startPace = paces[i].toDouble()
-            val endPace = if (i + 1 < paces.size) paces[i + 1].toDouble() else startPace
-            for (step in 0 until subStepsPerKm) {
-                val frac = step.toDouble() / subStepsPerKm.toDouble()
-                val interpPace = (startPace + (endPace - startPace) * frac).roundToLong().coerceIn(120L, 1800L)
-                val distKm = i + (step + 1) * (1.0 / subStepsPerKm)
-                val segDurSec = interpPace * (1.0 / subStepsPerKm)
-                segments.add(
-                    PaceSegmentSample(
-                        distanceKmMark = distKm,
-                        paceSecondsPerKm = interpPace,
-                        segmentDurationSeconds = segDurSec
-                    )
+        var coveredKm = 0.0
+        for (i in splits.indices) {
+            val split = splits[i]
+            val segDistKm = (totalDistanceKm - coveredKm).coerceIn(0.05, 1.0)
+            val segDurSec = split.paceSeconds * segDistKm
+            coveredKm += segDistKm
+            segments.add(
+                PaceSegmentSample(
+                    distanceKmMark = coveredKm,
+                    paceSecondsPerKm = split.paceSeconds,
+                    segmentDurationSeconds = segDurSec
                 )
-            }
+            )
+            if (coveredKm >= totalDistanceKm - 0.02) break
         }
 
-        // Handle remaining fractional kilometer (e.g., 4.92 km has 0.92 km after KM 4)
-        val remainderKm = (totalDistanceKm - splits.size).coerceAtLeast(0.0)
+        val remainderKm = (totalDistanceKm - coveredKm).coerceAtLeast(0.0)
         if (remainderKm >= 0.05) {
-            val splitsSumSec = paces.sum()
-            val remDurSec = (totalDurationSec - splitsSumSec).coerceAtLeast((paces.last() * remainderKm).roundToLong())
+            val coveredDuration = segments.sumOf { it.segmentDurationSeconds }
+            val remDurSec = (totalDurationSec - coveredDuration).coerceAtLeast(splits.last().paceSeconds * remainderKm)
             val remPaceSec = (remDurSec / remainderKm).roundToLong().coerceIn(120L, 1800L)
-            val remSteps = (remainderKm * subStepsPerKm).roundToInt().coerceAtLeast(1)
-            val stepDur = remDurSec.toDouble() / remSteps
-            for (s in 1..remSteps) {
-                segments.add(
-                    PaceSegmentSample(
-                        distanceKmMark = splits.size + (s * remainderKm / remSteps),
-                        paceSecondsPerKm = remPaceSec,
-                        segmentDurationSeconds = stepDur
-                    )
+            segments.add(
+                PaceSegmentSample(
+                    distanceKmMark = totalDistanceKm,
+                    paceSecondsPerKm = remPaceSec,
+                    segmentDurationSeconds = remDurSec
                 )
-            }
+            )
         }
     } else {
         // When no splits were provided, use a standard physiological pacing curve:
@@ -1203,13 +1442,13 @@ private fun buildDeterministicPaceSegments(
 }
 
 /**
- * Patented Jack Daniels VDOT Pace Zone Distribution:
- * Zones are anchored to the athlete's Lactate Threshold Pace (T-Pace, in sec/km):
- * - Zone 5 (Repetition / Anaerobic, >106% T-speed): Pace <= 0.94 * T-Pace
- * - Zone 4 (Interval / VO2Max, 99% - 106% T-speed): 0.94 * T-Pace < Pace <= 1.01 * T-Pace
- * - Zone 3 (Tempo / Threshold & Marathon, 90% - 99% T-speed): 1.01 * T-Pace < Pace <= 1.11 * T-Pace
- * - Zone 2 (Easy / Aerobic Endurance, 79% - 90% T-speed): 1.11 * T-Pace < Pace <= 1.26 * T-Pace
- * - Zone 1 (Active Recovery, <79% T-speed): Pace > 1.26 * T-Pace
+ * Patented Jack Daniels VDOT 5-Zone Pace Distribution aligned 1:1 with Heart Rate zones:
+ * Zones are anchored to the athlete's Lactate Threshold Pace (T-Pace, in sec/km; faster pace = smaller sec/km):
+ * - Zone 5 (VO2Max Interval & Repetition, >105% T-speed, 93-100% HRmax): Pace <= 0.95 * T-Pace
+ * - Zone 4 (Lactate Threshold / T-Pace, 97% - 105% T-speed, 85-90% HRmax): 0.95 * T-Pace < Pace <= 1.03 * T-Pace
+ * - Zone 3 (Marathon / Aerobic Tempo, 88% - 97% T-speed, 79-84% HRmax): 1.03 * T-Pace < Pace <= 1.14 * T-Pace
+ * - Zone 2 (Easy / Aerobic Endurance, 77% - 88% T-speed, 65-78% HRmax): 1.14 * T-Pace < Pace <= 1.30 * T-Pace
+ * - Zone 1 (Active Recovery, <77% T-speed, <65% HRmax): Pace > 1.30 * T-Pace
  *
  * Time in each zone is integrated from actual segment durations and normalized to 100%.
  */
@@ -1220,21 +1459,21 @@ private fun computeScientificVdotPaceZoneDistribution(
 ): List<PaceZoneDistributionItem> {
     if (segments.isEmpty()) return emptyList()
 
-    val z5Bound = (thresholdPaceSec * 0.94).roundToLong().coerceAtLeast(120L)
-    val z4Bound = (thresholdPaceSec * 1.01).roundToLong().coerceAtLeast(z5Bound + 5L)
-    val z3Bound = (thresholdPaceSec * 1.11).roundToLong().coerceAtLeast(z4Bound + 10L)
-    val z2Bound = (thresholdPaceSec * 1.26).roundToLong().coerceAtLeast(z3Bound + 15L)
+    val z5Bound = (thresholdPaceSec * 0.95).roundToLong().coerceAtLeast(120L)
+    val z4Bound = (thresholdPaceSec * 1.03).roundToLong().coerceAtLeast(z5Bound + 6L)
+    val z3Bound = (thresholdPaceSec * 1.14).roundToLong().coerceAtLeast(z4Bound + 10L)
+    val z2Bound = (thresholdPaceSec * 1.30).roundToLong().coerceAtLeast(z3Bound + 15L)
 
     val zoneDurationsSec = DoubleArray(5)
     for (seg in segments) {
         val p = seg.paceSecondsPerKm
         val dur = seg.segmentDurationSeconds
         when {
-            p <= z5Bound -> zoneDurationsSec[4] += dur // Zone 5
-            p <= z4Bound -> zoneDurationsSec[3] += dur // Zone 4
-            p <= z3Bound -> zoneDurationsSec[2] += dur // Zone 3
-            p <= z2Bound -> zoneDurationsSec[1] += dur // Zone 2
-            else -> zoneDurationsSec[0] += dur         // Zone 1
+            p <= z5Bound -> zoneDurationsSec[4] += dur // Zone 5: VO2Max / Anaerobic
+            p <= z4Bound -> zoneDurationsSec[3] += dur // Zone 4: Lactate Threshold (T-Pace centered here)
+            p <= z3Bound -> zoneDurationsSec[2] += dur // Zone 3: Marathon / Aerobic Tempo
+            p <= z2Bound -> zoneDurationsSec[1] += dur // Zone 2: Easy / Aerobic Base
+            else -> zoneDurationsSec[0] += dur         // Zone 1: Active Recovery
         }
     }
 
@@ -1253,13 +1492,13 @@ private fun computeScientificVdotPaceZoneDistribution(
         fIdx++
     }
 
-    fun fmt(sec: Long) = RacePredictionEngine.formatPace(sec).removeSuffix("/km")
+    fun fmt(sec: Long) = RacePredictionEngine.formatPace(sec).removeSuffix("/km").trim()
 
     val definitions = listOf(
-        Triple(5, "Zona 5 • Repetition / Anaerobic", "< ${fmt(z5Bound)} /km") to KineticCoral,
-        Triple(4, "Zona 4 • Interval / VO2Max", "${fmt(z5Bound)} - ${fmt(z4Bound)} /km") to WarningAmber,
-        Triple(3, "Zona 3 • Tempo / Threshold", "${fmt(z4Bound)} - ${fmt(z3Bound)} /km") to VoltLime,
-        Triple(2, "Zona 2 • Easy / Aerobic Endurance", "${fmt(z3Bound)} - ${fmt(z2Bound)} /km") to AeroCyan,
+        Triple(5, "Zona 5 • VO2Max / Anaerobic", "< ${fmt(z5Bound)} /km") to KineticCoral,
+        Triple(4, "Zona 4 • Lactate Threshold", "${fmt(z5Bound)} - ${fmt(z4Bound)} /km") to WarningAmber,
+        Triple(3, "Zona 3 • Marathon / Tempo Aerobik", "${fmt(z4Bound)} - ${fmt(z3Bound)} /km") to VoltLime,
+        Triple(2, "Zona 2 • Easy / Aerobic Base", "${fmt(z3Bound)} - ${fmt(z2Bound)} /km") to AeroCyan,
         Triple(1, "Zona 1 • Active Recovery", "> ${fmt(z2Bound)} /km") to SuccessGreen
     )
 
@@ -1410,7 +1649,7 @@ private fun buildComprehensiveAiResult(
         } else {
             "Positive Split (awal cepat lalu stabil)"
         }
-        "Pola lari menunjukkan $trend. Split tercepat dicapai pada KM ${fastestSplit.km} (${fastestSplit.paceStr}/km) dengan rentang variasi antar split $spread detik/km."
+        "Pola lari menunjukkan $trend. Split tercepat dicapai pada KM ${fastestSplit.kmLabel} (${fastestSplit.paceStr}/km) dengan rentang variasi antar split $spread detik/km."
     } else {
         "Pace rata-rata terjaga di ${RacePredictionEngine.formatPace(avgPaceSec)} sepanjang ${"%.2f".format(workout.distanceKm)} km."
     }
@@ -1425,7 +1664,7 @@ private fun buildComprehensiveAiResult(
     val nextAction = if (primaryPr != null && primaryPr.rank > 1 && primaryPr.diffFromBestSec in 1L..30L) {
         "Karena Anda hanya berjarak ${formatDeltaSeconds(primaryPr.diffFromBestSec)} dari PR #1, jaga pace awal di ${RacePredictionEngine.formatPace(avgPaceSec)} pada paruh pertama lalu tingkatkan ritme ke Threshold Pace (${RacePredictionEngine.formatPace(thresholdPaceSec)}) di kilometer terakhir untuk memecahkan PR #1!"
     } else {
-        "Pulihkan energi ~$calories kcal dengan nutrisi karbohidrat & protein (rasio 3:1) dalam 45 menit pasca-lari, serta kombinasikan sesi Interval (Zona 4) dan Easy Run (Zona 2) di jadwal latihan minggu ini."
+        "Pulihkan energi ~$calories kcal dengan nutrisi karbohidrat & protein (rasio 3:1) dalam 45 menit pasca-lari, serta kombinasikan sesi Threshold / Interval (Zona 4-5) dan Easy Run (Zona 2) di jadwal latihan minggu ini."
     }
 
     return buildString {

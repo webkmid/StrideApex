@@ -44,7 +44,7 @@ service cloud.firestore {
              data.splitsSummary is string && data.splitsSummary.size() <= 1000 &&
              data.aiCoachingInsight is string && data.aiCoachingInsight.size() <= 2000 &&
              data.sourceType is string && data.sourceType in ['STRAVA_OCR', 'MANUAL'] &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.createdAt is timestamp &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
@@ -59,7 +59,7 @@ service cloud.firestore {
              data.previousTimeSeconds is int && data.previousTimeSeconds >= 0 && data.previousTimeSeconds <= 864000 &&
              data.paceSecondsPerKm is int && data.paceSecondsPerKm >= 60 && data.paceSecondsPerKm <= 3600 &&
              data.workoutTitle is string && data.workoutTitle.size() >= 1 && data.workoutTitle.size() <= 120 &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.createdAt is timestamp &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
@@ -76,7 +76,7 @@ service cloud.firestore {
              data.reminderHour is int && data.reminderHour >= 0 && data.reminderHour <= 23 &&
              data.reminderMinute is int && data.reminderMinute >= 0 && data.reminderMinute <= 59 &&
              data.completed is bool &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.createdAt is timestamp &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
@@ -90,7 +90,7 @@ service cloud.firestore {
              data.prCount is int && data.prCount >= 0 && data.prCount <= 1000 &&
              data.goalCount is int && data.goalCount >= 0 && data.goalCount <= 1000 &&
              data.summaryNotes is string && data.summaryNotes.size() <= 4000 &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.createdAt is timestamp &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
@@ -123,12 +123,11 @@ service cloud.firestore {
                          isValidId(workoutId) &&
                          isValidWorkoutLog(incoming(), userId) &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'title', 'distanceKm', 'durationSeconds',
                            'avgPaceSecondsPerKm', 'avgHeartRate', 'cadenceSpm',
                            'elevationGainM', 'splitsSummary', 'aiCoachingInsight',
-                           'sourceType', 'updatedAt'
+                           'sourceType', 'createdAt', 'updatedAt'
                          ]);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(workoutId) && existing().userId == request.auth.uid;
@@ -159,11 +158,10 @@ service cloud.firestore {
                          isValidId(prId) &&
                          isValidPersonalRecord(incoming(), userId) &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'distanceCategory', 'distanceMeters',
                            'bestTimeSeconds', 'previousTimeSeconds',
-                           'paceSecondsPerKm', 'workoutTitle', 'updatedAt'
+                           'paceSecondsPerKm', 'workoutTitle', 'createdAt', 'updatedAt'
                          ]);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(prId) && existing().userId == request.auth.uid;
@@ -196,12 +194,11 @@ service cloud.firestore {
                          isValidId(goalId) &&
                          isValidTrainingGoal(incoming(), userId) &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'title', 'targetDistanceCategory',
                            'targetTimeSeconds', 'weeklyMileageTargetKm',
                            'reminderEnabled', 'reminderHour', 'reminderMinute',
-                           'completed', 'updatedAt'
+                           'completed', 'createdAt', 'updatedAt'
                          ]);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(goalId) && existing().userId == request.auth.uid;
@@ -232,10 +229,9 @@ service cloud.firestore {
                          isValidId(backupId) &&
                          isValidCloudBackupSnapshot(incoming(), userId) &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'backupLabel', 'workoutCount',
-                           'prCount', 'goalCount', 'summaryNotes', 'updatedAt'
+                           'prCount', 'goalCount', 'summaryNotes', 'createdAt', 'updatedAt'
                          ]);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(backupId) && existing().userId == request.auth.uid;

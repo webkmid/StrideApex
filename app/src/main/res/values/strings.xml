@@ -3,9 +3,12 @@
     <string name="tagline">Athletic Telemetry, Strava Scanner &amp; Biomechanics Lab</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="auth_subtitle">Sync workouts, race predictions, PRs, and cloud backups across all your devices.</string>
-    <string name="nav_dashboard">Dashboard</string>
-    <string name="nav_ocr_scan">Scan Run</string>
-    <string name="nav_predict_prs">PR &amp; Prediksi</string>
+    <string name="nav_dashboard">Dasbor</string>
+    <string name="nav_shoes">Sepatu</string>
+    <string name="nav_progress">Progress</string>
+    <string name="nav_ocr_scan">Scan</string>
+    <string name="nav_history">History</string>
+    <string name="nav_predict_prs">Prediksi</string>
     <string name="nav_biomechanics">Coach</string>
     <string name="scan_strava_screenshot">Scan Strava Screenshot</string>
     <string name="generate_sample_strava">Load Sample Strava Screenshot</string>

@@ -95,43 +95,45 @@ object RacePredictionEngine {
     }
 
     /**
-     * Computes 5 scientific training pace zones from a runner's current 10K equivalent pace.
+     * Computes 5 scientific training pace zones anchored proportionally to Lactate Threshold Pace
+     * (T-Pace ~ 1.03 x 10K equivalent pace) across all runner speeds.
      */
     fun computeTrainingPaceZones(tenKPaceSecondsPerKm: Long): List<TrainingPaceZone> {
-        val base = tenKPaceSecondsPerKm.coerceIn(160L, 480L)
+        val base = tenKPaceSecondsPerKm.coerceIn(150L, 540L)
+        val tPace = (base * 1.03)
         return listOf(
             TrainingPaceZone(
                 zoneName = "Zone 1-2: Easy / Aerobic Base",
                 code = "E",
-                paceRangePerKm = "${formatPaceShort(base + 52)} - ${formatPaceShort(base + 75)} /km",
+                paceRangePerKm = "${formatPaceShort((tPace * 1.14).roundToLong())} - ${formatPaceShort((tPace * 1.30).roundToLong())} /km",
                 physiologicalBenefit = "Mitochondrial density, capillary growth & active recovery",
                 heartRatePctRange = "65% - 78% HRmax"
             ),
             TrainingPaceZone(
-                zoneName = "Zone 3: Marathon Specific Pace",
+                zoneName = "Zone 3: Marathon / Aerobic Tempo",
                 code = "M",
-                paceRangePerKm = "${formatPaceShort(base + 22)} - ${formatPaceShort(base + 32)} /km",
+                paceRangePerKm = "${formatPaceShort((tPace * 1.04).roundToLong())} - ${formatPaceShort((tPace * 1.13).roundToLong())} /km",
                 physiologicalBenefit = "Lipid oxidation efficiency & race-pace biomechanical economy",
                 heartRatePctRange = "79% - 84% HRmax"
             ),
             TrainingPaceZone(
                 zoneName = "Zone 4: Lactate Threshold",
                 code = "T",
-                paceRangePerKm = "${formatPaceShort(base + 4)} - ${formatPaceShort(base + 12)} /km",
+                paceRangePerKm = "${formatPaceShort((tPace * 0.97).roundToLong())} - ${formatPaceShort((tPace * 1.03).roundToLong())} /km",
                 physiologicalBenefit = "Raises lactate clearance shuttle ceiling (60-min race effort)",
                 heartRatePctRange = "85% - 90% HRmax"
             ),
             TrainingPaceZone(
                 zoneName = "Zone 5A: VO2 Max Intervals",
                 code = "I",
-                paceRangePerKm = "${formatPaceShort((base - 14).coerceAtLeast(140))} - ${formatPaceShort((base - 8).coerceAtLeast(145))} /km",
+                paceRangePerKm = "${formatPaceShort((tPace * 0.90).roundToLong().coerceAtLeast(135L))} - ${formatPaceShort((tPace * 0.95).roundToLong().coerceAtLeast(145L))} /km",
                 physiologicalBenefit = "Maximizes cardiac stroke volume & central oxygen uptake",
                 heartRatePctRange = "93% - 98% HRmax"
             ),
             TrainingPaceZone(
                 zoneName = "Zone 5B: Neuromuscular Repetition",
                 code = "R",
-                paceRangePerKm = "${formatPaceShort((base - 28).coerceAtLeast(125))} - ${formatPaceShort((base - 18).coerceAtLeast(135))} /km",
+                paceRangePerKm = "${formatPaceShort((tPace * 0.83).roundToLong().coerceAtLeast(120L))} - ${formatPaceShort((tPace * 0.89).roundToLong().coerceAtLeast(130L))} /km",
                 physiologicalBenefit = "Fast-twitch fiber recruitment, tendon stiffness & running economy",
                 heartRatePctRange = "98% - 100% Effort"
             )
